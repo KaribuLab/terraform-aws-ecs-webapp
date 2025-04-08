@@ -1,0 +1,29 @@
+output "alb_target_group_arn" {
+  description = "ARN of the Target Group connected to the ALB"
+  value       = aws_lb_target_group.nodejs.arn
+}
+
+output "ecs_service_name" {
+  description = "Name of the ECS service"
+  value       = aws_ecs_service.nodejs.name
+} 
+
+output "ecs_task_definition_arn" {
+  description = "ARN of the ECS task definition"
+  value       = aws_ecs_task_definition.nodejs.arn
+} 
+
+output "iam_execution_role_arn" {
+  description = "ARN of the ECS execution role"
+  value       = aws_iam_role.execution.arn
+}
+
+output "cluster_name" {
+  description = "Name of the ECS cluster"
+  value       = var.cluster_name
+}
+
+output "service_name" {
+  description = "Name of the ECS service"
+  value       = var.service_name
+} 
