@@ -1,4 +1,4 @@
-resource "aws_ecs_task_definition" "nodejs" {
+resource "aws_ecs_task_definition" "webapp" {
   family                   = var.service_name
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
@@ -25,10 +25,10 @@ resource "aws_ecs_task_definition" "nodejs" {
   tags = var.common_tags
 }
 
-resource "aws_ecs_service" "nodejs" {
+resource "aws_ecs_service" "webapp" {
   name            = var.service_name
   cluster         = var.cluster_name
-  task_definition = aws_ecs_task_definition.nodejs.arn
+  task_definition = aws_ecs_task_definition.webapp.arn
   desired_count   = var.autoscaling_config.min_capacity
   launch_type     = "FARGATE"
 
@@ -39,7 +39,7 @@ resource "aws_ecs_service" "nodejs" {
   }
 
   load_balancer {
-    target_group_arn = aws_lb_target_group.nodejs.arn
+    target_group_arn = aws_lb_target_group.webapp.arn
     container_name   = var.service_name
     container_port   = var.container_port
   }
@@ -57,12 +57,12 @@ resource "aws_ecs_service" "nodejs" {
     rollback = var.enable_deployment_circuit_breaker
   }
 
-  depends_on = [aws_lb_listener_rule.nodejs]
+  depends_on = [aws_lb_listener_rule.webapp]
 
   tags = var.common_tags
 }
 
-resource "aws_lb_target_group" "nodejs" {
+resource "aws_lb_target_group" "webapp" {
   name                 = "${var.service_name}-tg"
   port                 = var.target_group_port != null ? var.target_group_port : var.container_port
   protocol             = "HTTP"
@@ -82,7 +82,7 @@ resource "aws_lb_target_group" "nodejs" {
   tags = var.common_tags
 }
 
-resource "aws_lb_listener_rule" "nodejs" {
+resource "aws_lb_listener_rule" "webapp" {
   for_each = {
     for rule in var.listener_rules : "rule-${rule.priority}" => rule
   }
@@ -92,7 +92,7 @@ resource "aws_lb_listener_rule" "nodejs" {
 
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.nodejs.arn
+    target_group_arn = aws_lb_target_group.webapp.arn
   }
 
   condition {
