@@ -105,12 +105,6 @@ variable "task_policy_json" {
   default     = null
 }
 
-variable "target_group_port" {
-  description = "Port for the target group (if different from the container port)"
-  type        = number
-  default     = null
-}
-
 variable "target_group_deregistration_delay" {
   description = "Amount of time for Elastic Load Balancing to wait before changing the state of a deregistering target from draining to unused"
   type        = number

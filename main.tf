@@ -72,7 +72,7 @@ resource "aws_ecs_service" "webapp" {
 
 resource "aws_lb_target_group" "webapp" {
   name                 = "${var.service_name}-tg"
-  port                 = var.target_group_port != null ? var.target_group_port : var.container_port
+  port                 = var.container_port
   protocol             = "HTTP"
   vpc_id               = var.vpc_id
   target_type          = "ip"

@@ -46,15 +46,8 @@ if [ -z "$CONTAINER_PORT" ]; then
     export CONTAINER_PORT="80"
 fi
 
-# Definir TARGET_GROUP_PORT si no está definido
-if [ -z "$TARGET_GROUP_PORT" ]; then
-    echo "Variable TARGET_GROUP_PORT no definida, usando valor predeterminado: 80"
-    export TARGET_GROUP_PORT="80"
-fi
-
 echo "Usando imagen Docker: $DOCKER_IMAGE"
 echo "Usando puerto de contenedor: $CONTAINER_PORT"
-echo "Usando puerto de target group: $TARGET_GROUP_PORT"
 
 # Verificar si las variables VPC_ID, PUBLIC_SUBNET_IDS, y PRIVATE_SUBNET_IDS están definidas
 if [ -z "$VPC_ID" ]; then
@@ -268,7 +261,6 @@ docker_image   = "${DOCKER_IMAGE}"
 
 # Configuración de puertos
 container_port = ${CONTAINER_PORT}
-target_group_port = ${TARGET_GROUP_PORT}
 
 # Recursos asignados al contenedor
 task_cpu       = "256"

@@ -22,7 +22,6 @@ This module creates an ECS Fargate service for deploying web applications with l
 | autoscaling_config             | object        | [Auto scaling configuration](#autoscaling-config)            | yes      |
 | common_tags                    | map(string)   | Common tags to be applied to all resources                   | yes      |
 | task_policy_json               | string        | IAM Policy document in JSON format for the task role         | no       |
-| target_group_port              | number        | Port for the target group (if different from container port) | no       |
 | target_group_deregistration_delay | number     | Time for ELB to wait before deregistering targets            | no       |
 | force_new_deployment           | bool          | Force a new deployment of the service                        | no       |
 | deployment_config              | object        | [Deployment configuration](#deployment-config)               | yes      |
@@ -99,8 +98,6 @@ module "webapp" {
   subnet_ids         = module.vpc.private_subnets
   security_group_ids = [aws_security_group.ecs_tasks.id]
   alb_listener_arn   = module.alb.http_listener_arn
-  
-  target_group_port  = 80
   
   environment_variables = [
     {
@@ -220,24 +217,18 @@ terraform apply
 
 The `-reconfigure` flag is necessary because the backend configuration may change between test runs when the script recreates S3 buckets and DynamoDB tables.
 
-### Testing with different container port and ALB port
+### Container Port Configuration
 
-If your application container listens on a non-standard port (e.g., 3000), but you want to expose it via the ALB on port 80, you can:
+The target group and the load balancer will always forward traffic to the same port that your container exposes. This simplifies configuration and ensures consistency.
 
-1. Set the variables in your `.env` file:
+If your application container listens on a non-standard port (e.g., 3000), simply set the container port in your `.env` file:
 
 ```bash
 DOCKER_IMAGE=my-application:latest
 CONTAINER_PORT=3000
-TARGET_GROUP_PORT=80
 ```
 
-2. Or modify the generated `terraform.tfvars` file after running the setup script:
-
-```hcl
-container_port = 3000      # Port your application listens on
-target_group_port = 80     # Port the ALB will forward traffic from
-```
+The module will automatically configure the target group to forward traffic to port 3000.
 
 ### Network Configuration
 
