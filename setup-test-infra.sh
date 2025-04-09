@@ -4,6 +4,9 @@
 
 set -e
 
+# Configurar AWS CLI para no usar paginador
+export AWS_PAGER=""
+
 # Función para cargar variables de un archivo .env
 dotenv() {
   if [ -f .env ]; then
@@ -31,287 +34,92 @@ if [ -z "$AWS_REGION" ]; then
     export AWS_REGION="us-east-1"
 fi
 
-# Función para crear VPC y subredes si no están definidas
-create_vpc_and_subnets() {
-    echo "Creando VPC y subredes automáticamente..."
-    
-    # Intentar crear VPC
-    echo "Intentando crear una nueva VPC..."
-    vpc_id=$(aws ec2 create-vpc \
-        --cidr-block 10.0.0.0/16 \
-        --tag-specifications "ResourceType=vpc,Tags=[{Key=Name,Value=terraform-test-vpc}]" \
-        --query "Vpc.VpcId" \
-        --output text 2>/dev/null || echo "ERROR_CREATING_VPC")
-    
-    # Si no se puede crear la VPC, buscar una existente
-    if [ "$vpc_id" = "ERROR_CREATING_VPC" ]; then
-        echo "No se pudo crear una nueva VPC. Buscando VPCs existentes..."
-        vpc_id=$(aws ec2 describe-vpcs \
-            --query "Vpcs[0].VpcId" \
-            --output text)
-        
-        if [ -z "$vpc_id" ] || [ "$vpc_id" = "None" ]; then
-            echo "Error: No se encontraron VPCs existentes. Por favor, especifique una VPC en el archivo .env"
-            exit 1
-        fi
-        
-        echo "Usando VPC existente: $vpc_id"
-        
-        # Obtener subredes existentes en la VPC específica
-        echo "Buscando subredes existentes en la VPC..."
-        
-        # Obtener todas las subredes de la VPC
-        all_subnets=($(aws ec2 describe-subnets \
-            --filters "Name=vpc-id,Values=$vpc_id" \
-            --query "Subnets[].SubnetId" \
-            --output text))
-        
-        if [ ${#all_subnets[@]} -lt 2 ]; then
-            echo "Error: No se encontraron suficientes subredes en la VPC. Se necesitan al menos 2 subredes."
-            exit 1
-        fi
-        
-        # Buscar subredes públicas (con ruta a Internet Gateway)
-        echo "Identificando subredes públicas en la VPC..."
-        public_subnet_ids=()
-        
-        for subnet in "${all_subnets[@]}"; do
-            # Verificar si la subred tiene una ruta a un Internet Gateway
-            route_to_igw=$(aws ec2 describe-route-tables \
-                --filters "Name=association.subnet-id,Values=$subnet" \
-                --query "RouteTables[].Routes[?DestinationCidrBlock=='0.0.0.0/0'].GatewayId" \
-                --output text)
-            
-            if [[ $route_to_igw == *"igw-"* ]]; then
-                public_subnet_ids+=("$subnet")
-            fi
-        done
-        
-        # Si no se encontraron subredes públicas, usar las primeras dos subredes como públicas y privadas
-        if [ ${#public_subnet_ids[@]} -lt 2 ]; then
-            echo "No se encontraron suficientes subredes públicas. Usando las primeras 2 subredes disponibles."
-            public_subnet_1=${all_subnets[0]}
-            public_subnet_2=${all_subnets[1]}
-            private_subnet_1=${all_subnets[0]}
-            private_subnet_2=${all_subnets[1]}
-        else
-            echo "Se encontraron ${#public_subnet_ids[@]} subredes públicas. Usando las primeras 2."
-            public_subnet_1=${public_subnet_ids[0]}
-            public_subnet_2=${public_subnet_ids[1]}
-            # Preferir usar subredes diferentes para privadas si están disponibles
-            if [ ${#all_subnets[@]} -gt 2 ]; then
-                # Encontrar subredes que no sean públicas
-                private_subnets=()
-                for subnet in "${all_subnets[@]}"; do
-                    if [[ ! " ${public_subnet_ids[@]} " =~ " ${subnet} " ]]; then
-                        private_subnets+=("$subnet")
-                    fi
-                done
-                
-                if [ ${#private_subnets[@]} -ge 2 ]; then
-                    private_subnet_1=${private_subnets[0]}
-                    private_subnet_2=${private_subnets[1]}
-                else
-                    # Usar subredes públicas como privadas
-                    private_subnet_1=${public_subnet_ids[0]}
-                    private_subnet_2=${public_subnet_ids[1]}
-                fi
-            else
-                # Usar subredes públicas como privadas
-                private_subnet_1=${public_subnet_ids[0]}
-                private_subnet_2=${public_subnet_ids[1]}
-            fi
-        fi
-        
-        echo "Usando subredes públicas: $public_subnet_1, $public_subnet_2"
-        echo "Usando subredes privadas: $private_subnet_1, $private_subnet_2"
-        
-        # Establecer variables para uso posterior
-        VPC_ID="$vpc_id"
-        PUBLIC_SUBNET_IDS="$public_subnet_1,$public_subnet_2"
-        PRIVATE_SUBNET_IDS="$private_subnet_1,$private_subnet_2"
-        export VPC_ID PUBLIC_SUBNET_IDS PRIVATE_SUBNET_IDS
-        
-        # No marcar como VPC_CREATED ya que no fue creada por este script
-        VPC_CREATED=false
-    else
-        echo "VPC creada: $vpc_id"
-        
-        # Esperar a que la VPC esté disponible
-        aws ec2 wait vpc-available --vpc-ids "$vpc_id"
-        
-        # Habilitar nombres de DNS para la VPC
-        aws ec2 modify-vpc-attribute \
-            --vpc-id "$vpc_id" \
-            --enable-dns-hostnames "{\"Value\":true}"
-        
-        # Crear Internet Gateway
-        igw_id=$(aws ec2 create-internet-gateway \
-            --tag-specifications "ResourceType=internet-gateway,Tags=[{Key=Name,Value=terraform-test-igw}]" \
-            --query "InternetGateway.InternetGatewayId" \
-            --output text)
-        
-        echo "Internet Gateway creado: $igw_id"
-        
-        # Adjuntar Internet Gateway a la VPC
-        aws ec2 attach-internet-gateway \
-            --vpc-id "$vpc_id" \
-            --internet-gateway-id "$igw_id"
-        
-        # Obtener las zonas de disponibilidad
-        availability_zones=($(aws ec2 describe-availability-zones \
-            --query "AvailabilityZones[0:2].ZoneName" \
-            --output text))
-        
-        echo "Usando zonas de disponibilidad: ${availability_zones[0]} y ${availability_zones[1]}"
-        
-        # Crear subredes públicas
-        public_subnet_1=$(aws ec2 create-subnet \
-            --vpc-id "$vpc_id" \
-            --cidr-block 10.0.1.0/24 \
-            --availability-zone "${availability_zones[0]}" \
-            --tag-specifications "ResourceType=subnet,Tags=[{Key=Name,Value=terraform-test-public-1}]" \
-            --query "Subnet.SubnetId" \
-            --output text)
-        
-        public_subnet_2=$(aws ec2 create-subnet \
-            --vpc-id "$vpc_id" \
-            --cidr-block 10.0.2.0/24 \
-            --availability-zone "${availability_zones[1]}" \
-            --tag-specifications "ResourceType=subnet,Tags=[{Key=Name,Value=terraform-test-public-2}]" \
-            --query "Subnet.SubnetId" \
-            --output text)
-        
-        echo "Subredes públicas creadas: $public_subnet_1, $public_subnet_2"
-        
-        # Habilitar asignación automática de IPs públicas en subredes públicas
-        aws ec2 modify-subnet-attribute \
-            --subnet-id "$public_subnet_1" \
-            --map-public-ip-on-launch
-        
-        aws ec2 modify-subnet-attribute \
-            --subnet-id "$public_subnet_2" \
-            --map-public-ip-on-launch
-        
-        # Crear subredes privadas
-        private_subnet_1=$(aws ec2 create-subnet \
-            --vpc-id "$vpc_id" \
-            --cidr-block 10.0.3.0/24 \
-            --availability-zone "${availability_zones[0]}" \
-            --tag-specifications "ResourceType=subnet,Tags=[{Key=Name,Value=terraform-test-private-1}]" \
-            --query "Subnet.SubnetId" \
-            --output text)
-        
-        private_subnet_2=$(aws ec2 create-subnet \
-            --vpc-id "$vpc_id" \
-            --cidr-block 10.0.4.0/24 \
-            --availability-zone "${availability_zones[1]}" \
-            --tag-specifications "ResourceType=subnet,Tags=[{Key=Name,Value=terraform-test-private-2}]" \
-            --query "Subnet.SubnetId" \
-            --output text)
-        
-        echo "Subredes privadas creadas: $private_subnet_1, $private_subnet_2"
-        
-        # Crear NAT Gateway para que las subredes privadas puedan acceder a Internet
-        echo "Creando Elastic IP para NAT Gateway..."
-        nat_eip=$(aws ec2 allocate-address \
-            --domain vpc \
-            --query "AllocationId" \
-            --output text)
-        
-        echo "Elastic IP creada: $nat_eip"
-        
-        echo "Creando NAT Gateway..."
-        nat_gateway_id=$(aws ec2 create-nat-gateway \
-            --subnet-id "$public_subnet_1" \
-            --allocation-id "$nat_eip" \
-            --tag-specifications "ResourceType=natgateway,Tags=[{Key=Name,Value=terraform-test-nat}]" \
-            --query "NatGateway.NatGatewayId" \
-            --output text)
-        
-        echo "NAT Gateway creado: $nat_gateway_id"
-        
-        # Esperar a que el NAT Gateway esté disponible
-        echo "Esperando a que el NAT Gateway esté disponible..."
-        aws ec2 wait nat-gateway-available --nat-gateway-ids "$nat_gateway_id"
-        
-        # Crear tabla de enrutamiento para subredes públicas
-        public_route_table=$(aws ec2 create-route-table \
-            --vpc-id "$vpc_id" \
-            --tag-specifications "ResourceType=route-table,Tags=[{Key=Name,Value=terraform-test-public-rt}]" \
-            --query "RouteTable.RouteTableId" \
-            --output text)
-        
-        echo "Tabla de enrutamiento pública creada: $public_route_table"
-        
-        # Crear ruta a Internet Gateway
-        aws ec2 create-route \
-            --route-table-id "$public_route_table" \
-            --destination-cidr-block 0.0.0.0/0 \
-            --gateway-id "$igw_id"
-        
-        # Asociar tabla de enrutamiento con subredes públicas
-        aws ec2 associate-route-table \
-            --subnet-id "$public_subnet_1" \
-            --route-table-id "$public_route_table"
-        
-        aws ec2 associate-route-table \
-            --subnet-id "$public_subnet_2" \
-            --route-table-id "$public_route_table"
-        
-        # Crear tabla de enrutamiento para subredes privadas
-        private_route_table=$(aws ec2 create-route-table \
-            --vpc-id "$vpc_id" \
-            --tag-specifications "ResourceType=route-table,Tags=[{Key=Name,Value=terraform-test-private-rt}]" \
-            --query "RouteTable.RouteTableId" \
-            --output text)
-        
-        echo "Tabla de enrutamiento privada creada: $private_route_table"
-        
-        # Crear ruta a NAT Gateway
-        aws ec2 create-route \
-            --route-table-id "$private_route_table" \
-            --destination-cidr-block 0.0.0.0/0 \
-            --nat-gateway-id "$nat_gateway_id"
-        
-        # Asociar tabla de enrutamiento con subredes privadas
-        aws ec2 associate-route-table \
-            --subnet-id "$private_subnet_1" \
-            --route-table-id "$private_route_table"
-        
-        aws ec2 associate-route-table \
-            --subnet-id "$private_subnet_2" \
-            --route-table-id "$private_route_table"
-        
-        # Establecer variables para uso posterior
-        VPC_ID="$vpc_id"
-        PUBLIC_SUBNET_IDS="$public_subnet_1,$public_subnet_2"
-        PRIVATE_SUBNET_IDS="$private_subnet_1,$private_subnet_2"
-        export VPC_ID PUBLIC_SUBNET_IDS PRIVATE_SUBNET_IDS
-        
-        # Guardar IDs para el script de limpieza
-        VPC_CREATED=true
-        IGW_ID="$igw_id"
-        NAT_GATEWAY_ID="$nat_gateway_id"
-        NAT_EIP_ID="$nat_eip"
-        PUBLIC_ROUTE_TABLE_ID="$public_route_table"
-        PRIVATE_ROUTE_TABLE_ID="$private_route_table"
-        
-        echo "VPC y subredes creadas exitosamente"
-    fi
-}
+# Verificar si DOCKER_IMAGE está definido, si no, usar valor predeterminado
+if [ -z "$DOCKER_IMAGE" ]; then
+    echo "Variable DOCKER_IMAGE no definida, usando valor predeterminado: nginx:latest"
+    export DOCKER_IMAGE="nginx:latest"
+fi
+
+# Verificar si CONTAINER_PORT está definido, si no, usar valor predeterminado
+if [ -z "$CONTAINER_PORT" ]; then
+    echo "Variable CONTAINER_PORT no definida, usando valor predeterminado: 80"
+    export CONTAINER_PORT="80"
+fi
+
+# Definir TARGET_GROUP_PORT si no está definido
+if [ -z "$TARGET_GROUP_PORT" ]; then
+    echo "Variable TARGET_GROUP_PORT no definida, usando valor predeterminado: 80"
+    export TARGET_GROUP_PORT="80"
+fi
+
+echo "Usando imagen Docker: $DOCKER_IMAGE"
+echo "Usando puerto de contenedor: $CONTAINER_PORT"
+echo "Usando puerto de target group: $TARGET_GROUP_PORT"
 
 # Verificar si las variables VPC_ID, PUBLIC_SUBNET_IDS, y PRIVATE_SUBNET_IDS están definidas
-VPC_CREATED=false
-if [ -z "$VPC_ID" ] || [ -z "$PUBLIC_SUBNET_IDS" ] || [ -z "$PRIVATE_SUBNET_IDS" ]; then
-    create_vpc_and_subnets
-else
-    echo "Usando VPC y subredes existentes"
+if [ -z "$VPC_ID" ]; then
+    echo "Error: VPC_ID no está definido. Por favor, especifique una VPC en el archivo .env"
+    echo "Ejemplo: VPC_ID=vpc-xxxxxxxxxxxxxxxxx"
+    exit 1
+fi
+
+if [ -z "$PUBLIC_SUBNET_IDS" ]; then
+    echo "Error: PUBLIC_SUBNET_IDS no está definido. Por favor, especifique al menos 2 subredes públicas en el archivo .env"
+    echo "Ejemplo: PUBLIC_SUBNET_IDS=subnet-xxxxxxxxx,subnet-yyyyyyyyy"
+    exit 1
+fi
+
+if [ -z "$PRIVATE_SUBNET_IDS" ]; then
+    echo "Error: PRIVATE_SUBNET_IDS no está definido. Por favor, especifique al menos 2 subredes privadas en el archivo .env"
+    echo "Ejemplo: PRIVATE_SUBNET_IDS=subnet-xxxxxxxxx,subnet-yyyyyyyyy"
+    exit 1
 fi
 
 # Convertir las listas de subredes en arrays
 IFS=',' read -r -a public_subnets <<< "$PUBLIC_SUBNET_IDS"
 IFS=',' read -r -a private_subnets <<< "$PRIVATE_SUBNET_IDS"
+
+# Verificar que hay suficientes subredes (al menos 2 de cada tipo)
+if [ ${#public_subnets[@]} -lt 2 ]; then
+    echo "Error: Se necesitan al menos 2 subredes públicas. Solo se proporcionaron ${#public_subnets[@]}."
+    exit 1
+fi
+
+if [ ${#private_subnets[@]} -lt 2 ]; then
+    echo "Error: Se necesitan al menos 2 subredes privadas. Solo se proporcionaron ${#private_subnets[@]}."
+    exit 1
+fi
+
+# Advertir si se utilizan las mismas subredes para público y privado
+# Esto podría causar problemas ya que las tareas ECS se configuran sin IPs públicas
+same_subnets=false
+for priv_subnet in "${private_subnets[@]}"; do
+    for pub_subnet in "${public_subnets[@]}"; do
+        if [ "$priv_subnet" = "$pub_subnet" ]; then
+            same_subnets=true
+            echo "⚠️ ADVERTENCIA: La subred $priv_subnet se está usando tanto como subred pública como privada."
+            echo "Esto puede causar problemas porque las tareas ECS necesitan estar en subredes privadas con acceso a través de NAT Gateway."
+        fi
+    done
+done
+
+if [ "$same_subnets" = true ]; then
+    echo "⚠️ Se recomienda usar subredes diferentes para los servicios públicos (ALB) y privados (ECS)."
+    echo "¿Desea continuar de todos modos? (y/n)"
+    read -r response
+    if [ "$response" != "y" ] && [ "$response" != "Y" ]; then
+        echo "Operación cancelada por el usuario."
+        exit 1
+    fi
+fi
+
+# Usar las primeras 2 subredes de cada tipo
+public_subnet_1=${public_subnets[0]}
+public_subnet_2=${public_subnets[1]}
+private_subnet_1=${private_subnets[0]}
+private_subnet_2=${private_subnets[1]}
+
+echo "Subredes privadas para ECS: ${private_subnets[*]}"
 
 echo "Creando infraestructura en la región $AWS_REGION"
 echo "VPC: $VPC_ID"
@@ -320,199 +128,10 @@ echo "Subredes privadas: ${private_subnets[*]}"
 
 # Verificar si tenemos al menos 2 subredes públicas para el ALB
 if [ ${#public_subnets[@]} -lt 2 ]; then
-    echo "Advertencia: Se necesitan al menos 2 subredes públicas en diferentes zonas de disponibilidad para crear un ALB."
-    echo "Intentando crear un servicio sin ALB..."
-    
-    # 1. Crear el bucket de S3 para el backend de Terraform
-    bucket_name="terraform-state-$(date +%s)"
-    echo "Creando bucket S3 para el estado de Terraform: $bucket_name"
-    aws s3 mb "s3://$bucket_name" --region "$AWS_REGION"
-    
-    # Habilitar versionamiento en el bucket
-    aws s3api put-bucket-versioning \
-        --bucket "$bucket_name" \
-        --versioning-configuration Status=Enabled
-    
-    # Habilitar cifrado por defecto
-    aws s3api put-bucket-encryption \
-        --bucket "$bucket_name" \
-        --server-side-encryption-configuration '{"Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]}'
-    
-    # 2. Crear tabla de DynamoDB para el bloqueo de estado
-    dynamodb_table="terraform-locks-$(date +%s)"
-    echo "Creando tabla DynamoDB para bloqueos de estado: $dynamodb_table"
-    aws dynamodb create-table \
-        --table-name "$dynamodb_table" \
-        --attribute-definitions AttributeName=LockID,AttributeType=S \
-        --key-schema AttributeName=LockID,KeyType=HASH \
-        --billing-mode PAY_PER_REQUEST \
-        --region "$AWS_REGION"
-    
-    # 3. Crear el Security Group para el servicio ECS
-    echo "Creando Security Group para el servicio ECS..."
-    ecs_sg_id=$(aws ec2 create-security-group \
-        --group-name "test-ecs-sg-$(date +%s)" \
-        --description "Security group for test ECS service" \
-        --vpc-id "$VPC_ID" \
-        --query "GroupId" \
-        --output text)
-    
-    echo "Security Group del ECS creado: $ecs_sg_id"
-    
-    # Permitir tráfico HTTP entrante desde cualquier lugar (para pruebas)
-    aws ec2 authorize-security-group-ingress \
-        --group-id "$ecs_sg_id" \
-        --protocol tcp \
-        --port 80 \
-        --cidr "0.0.0.0/0"
-    
-    # 4. Crear el clúster ECS
-    echo "Creando clúster ECS..."
-    cluster_name="test-ecs-cluster-$(date +%s)"
-    aws ecs create-cluster \
-        --cluster-name "$cluster_name"
-    
-    echo "Clúster ECS creado: $cluster_name"
-    
-    # Verificar si terraform.tfvars ya existe, y eliminarlo
-    if [ -f terraform.tfvars ]; then
-        echo "Eliminando archivo terraform.tfvars existente..."
-        rm terraform.tfvars
-    fi
-    
-    # Generar archivo de variables para pruebas sin ALB
-    cat > terraform.tfvars << EOF
-cluster_name   = "${cluster_name}"
-service_name   = "test-service"
-docker_image   = "nginx:latest" # Usar una imagen pública para pruebas
-container_port = 80
-task_cpu       = "256"
-task_memory    = "512"
-subnet_ids     = [$(printf '"%s",' "${private_subnets[@]}" | sed 's/,$//')]
-security_group_ids = ["${ecs_sg_id}"]
-vpc_id         = "${VPC_ID}"
-
-environment_variables = [
-  {
-    name  = "ENV"
-    value = "test"
-  }
-]
-
-autoscaling_config = {
-  min_capacity       = 1
-  max_capacity       = 2
-  target_value       = 50
-  scale_in_cooldown  = 60
-  scale_out_cooldown = 60
-}
-
-deployment_config = {
-  maximum_percent         = 200
-  minimum_healthy_percent = 100
-}
-
-common_tags = {
-  Project     = "test-project"
-  Environment = "test"
-  Terraform   = "true"
-}
-EOF
-
-    # Generar el archivo backend.tf para las pruebas
-    cat > backend.tf << EOF
-terraform {
-  backend "s3" {
-    bucket         = "${bucket_name}"
-    key            = "terraform.tfstate"
-    region         = "${AWS_REGION}"
-    dynamodb_table = "${dynamodb_table}"
-    encrypt        = true
-  }
-}
-EOF
-
-    # Script para limpiar los recursos
-    cat > cleanup-test-infra.sh << EOF
-#!/bin/bash
-# Script para eliminar los recursos creados para pruebas
-
-set -e
-
-# Función para cargar variables de un archivo .env
-dotenv() {
-  if [ -f .env ]; then
-    set -o allexport
-    source .env
-    set +o allexport
-  fi
-}
-
-# Cargar variables de entorno desde .env si existe
-dotenv
-
-echo "Eliminando los recursos de prueba..."
-
-# Cargar variables
-CLUSTER_NAME="${cluster_name}"
-ECS_SG_ID="${ecs_sg_id}"
-
-# Eliminar servicios ECS si existen
-aws ecs list-services --cluster \$CLUSTER_NAME --query "serviceArns" --output text | tr '\t' '\n' | while read service; do
-  if [ ! -z "\$service" ]; then
-    echo "Eliminando servicio ECS: \$service"
-    aws ecs update-service --cluster \$CLUSTER_NAME --service \$service --desired-count 0
-    aws ecs delete-service --cluster \$CLUSTER_NAME --service \$service --force
-  fi
-done
-
-# Esperar a que los servicios se eliminen
-echo "Esperando a que los servicios se eliminen..."
-sleep 30
-
-# Eliminar clúster ECS
-echo "Eliminando clúster ECS: \$CLUSTER_NAME"
-aws ecs delete-cluster --cluster \$CLUSTER_NAME
-
-# Eliminar security groups
-echo "Eliminando security group de ECS: \$ECS_SG_ID"
-aws ec2 delete-security-group --group-id \$ECS_SG_ID
-
-# Eliminar la tabla DynamoDB
-echo "Eliminando tabla DynamoDB: ${dynamodb_table}"
-aws dynamodb delete-table --table-name "${dynamodb_table}" --region "${AWS_REGION}"
-
-# Eliminar el bucket S3 (primero hay que vaciarlo)
-echo "Vaciando y eliminando bucket S3: ${bucket_name}"
-aws s3 rm "s3://${bucket_name}" --recursive
-aws s3 rb "s3://${bucket_name}" --force
-
-echo "Limpieza completada."
-EOF
-
-    chmod +x cleanup-test-infra.sh
-
-    # Mostrar información sobre los recursos creados
-    echo ""
-    echo "=========================== INFRAESTRUCTURA CREADA ==========================="
-    echo "Se ha creado la siguiente infraestructura para pruebas:"
-    echo ""
-    echo "Bucket S3 para backend: $bucket_name"
-    echo "Tabla DynamoDB para bloqueos: $dynamodb_table"
-    echo "Security Group ECS: $ecs_sg_id"
-    echo "Clúster ECS: $cluster_name"
-    echo ""
-    echo "NOTA: No se ha creado un ALB porque no hay suficientes subredes públicas en diferentes zonas."
-    echo "Se ha generado un archivo 'terraform.tfvars' con configuración para pruebas sin ALB."
-    echo ""
-    echo "Para usar el módulo, ejecuta:"
-    echo "terraform init -reconfigure"
-    echo "terraform plan"
-    echo "terraform apply"
-    echo ""
-    echo "Para eliminar la infraestructura de prueba, ejecuta ./cleanup-test-infra.sh"
-    echo "==========================================================================="
-
+    echo "Error: Se necesitan al menos 2 subredes públicas en diferentes zonas de disponibilidad para crear un ALB."
+    echo "Por favor, proporcione al menos 2 subredes públicas en diferentes zonas de disponibilidad."
+    echo "Puede definirlas en un archivo .env como: PUBLIC_SUBNET_IDS=subnet-xxx,subnet-yyy"
+    exit 1
 else
     # Continue with the original script if there are enough public subnets
     # 1. Crear el bucket de S3 para el backend de Terraform
@@ -558,6 +177,8 @@ else
         --port 80 \
         --cidr "0.0.0.0/0"
 
+    echo "Configurando reglas de seguridad para comunicación ALB -> ECS..."
+
     # 4. Crear el Security Group para el servicio ECS
     echo "Creando Security Group para el servicio ECS..."
     ecs_sg_id=$(aws ec2 create-security-group \
@@ -573,7 +194,7 @@ else
     aws ec2 authorize-security-group-ingress \
         --group-id "$ecs_sg_id" \
         --protocol tcp \
-        --port 80 \
+        --port ${CONTAINER_PORT} \
         --source-group "$alb_sg_id"
 
     # 5. Crear el Application Load Balancer
@@ -620,6 +241,18 @@ else
 
     echo "Clúster ECS creado: $cluster_name"
 
+    # 9. Crear el grupo de logs en CloudWatch
+    echo "Creando grupo de logs en CloudWatch..."
+    service_name="test-service"
+    log_group_name="/ecs/$service_name"
+    aws logs create-log-group --log-group-name "$log_group_name" \
+        --tags "Key=Project,Value=test-project" "Key=Environment,Value=test" "Key=Terraform,Value=true"
+
+    aws logs put-retention-policy --log-group-name "$log_group_name" \
+        --retention-in-days 7
+
+    echo "Grupo de logs creado: $log_group_name"
+
     # Verificar si terraform.tfvars ya existe, y eliminarlo
     if [ -f terraform.tfvars ]; then
         echo "Eliminando archivo terraform.tfvars existente..."
@@ -628,16 +261,30 @@ else
     
     # Generar el archivo terraform.tfvars para las pruebas
     cat > terraform.tfvars << EOF
+# Configuración básica del servicio
 cluster_name   = "${cluster_name}"
 service_name   = "test-service"
-docker_image   = "nginx:latest" # Usar una imagen pública para pruebas
-container_port = 80
+docker_image   = "${DOCKER_IMAGE}"
+
+# Configuración de puertos
+container_port = ${CONTAINER_PORT}
+target_group_port = ${TARGET_GROUP_PORT}
+
+# Recursos asignados al contenedor
 task_cpu       = "256"
 task_memory    = "512"
+
+# ¡IMPORTANTE! - Configuración de red
+# Usar SOLO subredes PRIVADAS para el servicio ECS
+# ECS tasks need to be in private subnets to properly communicate with other AWS services
+# and download Docker images through the NAT Gateway, as they are configured without public IPs
 subnet_ids     = [$(printf '"%s",' "${private_subnets[@]}" | sed 's/,$//')]
 security_group_ids = ["${ecs_sg_id}"]
 vpc_id         = "${VPC_ID}"
 alb_listener_arn = "${listener_arn}"
+
+# Configuración de CloudWatch logs
+cloudwatch_log_group_name = "${log_group_name}"
 
 health_check = {
   path                = "/"
@@ -649,6 +296,10 @@ health_check = {
 }
 
 environment_variables = [
+  {
+    name  = "PORT"
+    value = "${CONTAINER_PORT}"
+  },
   {
     name  = "ENV"
     value = "test"
@@ -675,6 +326,27 @@ common_tags = {
 }
 EOF
 
+    echo "Archivo terraform.tfvars generado exitosamente."
+    echo ""
+    echo "Configurando servicio ECS para usar las siguientes subredes PRIVADAS:"
+    
+    # Verificar si jq está instalado
+    if command -v jq &> /dev/null; then
+        for subnet in "${private_subnets[@]}"; do
+            subnet_info=$(aws ec2 describe-subnets --subnet-ids "$subnet" --query "Subnets[0].{ID:SubnetId,AZ:AvailabilityZone,CIDR:CidrBlock}" --output json 2>/dev/null || echo "{}")
+            if [ "$subnet_info" != "{}" ]; then
+                echo "$subnet_info" | jq -r '"  - Subnet ID: " + .ID + " (AZ: " + .AZ + ", CIDR: " + .CIDR + ")"' 2>/dev/null || echo "  - $subnet (información no disponible)"
+            else
+                echo "  - $subnet (información no disponible)"
+            fi
+        done
+    else
+        # Formato simple si jq no está disponible
+        echo "  ${private_subnets[*]}"
+        echo "  (Para más detalles, instale jq: apt-get install jq o yum install jq)"
+    fi
+    echo ""
+
     # Generar el archivo backend.tf para las pruebas
     cat > backend.tf << EOF
 terraform {
@@ -688,12 +360,21 @@ terraform {
 }
 EOF
 
+    # Verificar si cleanup-test-infra.sh ya existe, y eliminarlo
+    if [ -f cleanup-test-infra.sh ]; then
+        echo "Eliminando script cleanup-test-infra.sh existente..."
+        rm cleanup-test-infra.sh
+    fi
+
     # Script para limpiar los recursos
     cat > cleanup-test-infra.sh << EOF
 #!/bin/bash
 # Script para eliminar los recursos creados para pruebas
 
 set -e
+
+# Configurar AWS CLI para no usar paginador
+export AWS_PAGER=""
 
 # Función para cargar variables de un archivo .env
 dotenv() {
@@ -714,38 +395,118 @@ CLUSTER_NAME="${cluster_name}"
 ECS_SG_ID="${ecs_sg_id}"
 ALB_ARN="${alb_arn}"
 ALB_LISTENER_ARN="${listener_arn}"
+ALB_SG_ID="${alb_sg_id}"
+DYNAMODB_TABLE="${dynamodb_table}"
+BUCKET_NAME="${bucket_name}"
+AWS_REGION="${AWS_REGION}"
 
-# Eliminar servicios ECS si existen
-aws ecs list-services --cluster \$CLUSTER_NAME --query "serviceArns" --output text | tr '\t' '\n' | while read service; do
-  if [ ! -z "\$service" ]; then
-    echo "Eliminando servicio ECS: \$service"
-    aws ecs update-service --cluster \$CLUSTER_NAME --service \$service --desired-count 0
-    aws ecs delete-service --cluster \$CLUSTER_NAME --service \$service --force
+# Función para detener y eliminar tareas y servicios ECS
+cleanup_ecs_resources() {
+  local cluster=\$1
+  echo "Iniciando limpieza de recursos en el clúster ECS: \$cluster"
+  
+  # Verificar si el clúster existe
+  if ! aws ecs describe-clusters --clusters \$cluster --query "clusters[0].status" --output text 2>/dev/null | grep -q ACTIVE; then
+    echo "El clúster \$cluster no existe o no está activo. Saltando la limpieza de ECS."
+    return 0
   fi
-done
+  
+  # Listar todos los servicios
+  echo "Buscando servicios ECS en el clúster \$cluster..."
+  local services=\$(aws ecs list-services --cluster \$cluster --query "serviceArns" --output text 2>/dev/null || echo "")
+  
+  if [ -n "\$services" ] && [ "\$services" != "None" ]; then
+    echo "Servicios encontrados. Deteniendo servicios..."
+    for service in \$(echo \$services | tr '\t' '\n'); do
+      if [ -n "\$service" ]; then
+        echo "Actualizando servicio a 0 tareas: \$service"
+        aws ecs update-service --cluster \$cluster --service \$service --desired-count 0 --no-force-new-deployment || true
+      fi
+    done
+    
+    # Esperar un momento para que se actualice el servicio
+    echo "Esperando 10 segundos para que los servicios actualicen su estado..."
+    sleep 10
+    
+    # Listar tareas en ejecución
+    echo "Buscando tareas en ejecución..."
+    local tasks=\$(aws ecs list-tasks --cluster \$cluster --query "taskArns" --output text 2>/dev/null || echo "")
+    
+    if [ -n "\$tasks" ] && [ "\$tasks" != "None" ]; then
+      echo "Tareas encontradas. Deteniendo tareas..."
+      for task in \$(echo \$tasks | tr '\t' '\n'); do
+        if [ -n "\$task" ]; then
+          echo "Deteniendo tarea: \$task"
+          aws ecs stop-task --cluster \$cluster --task \$task || true
+        fi
+      done
+      
+      # Esperar a que las tareas se detengan
+      echo "Esperando 15 segundos para que las tareas se detengan..."
+      sleep 15
+    else
+      echo "No se encontraron tareas en ejecución."
+    fi
+    
+    # Eliminar servicios
+    echo "Eliminando servicios ECS..."
+    for service in \$(echo \$services | tr '\t' '\n'); do
+      if [ -n "\$service" ]; then
+        echo "Eliminando servicio: \$service"
+        aws ecs delete-service --cluster \$cluster --service \$service --force || true
+      fi
+    done
+    
+    # Esperar a que los servicios se eliminen
+    echo "Esperando 10 segundos para que los servicios se eliminen..."
+    sleep 10
+  else
+    echo "No se encontraron servicios en el clúster."
+  fi
+  
+  # Intentar eliminar el clúster
+  echo "Eliminando clúster ECS: \$cluster"
+  aws ecs delete-cluster --cluster \$cluster || {
+    echo "Error al eliminar el clúster. Verificando nuevamente el estado..."
+    
+    # Verificar si hay tareas restantes
+    local remaining_tasks=\$(aws ecs list-tasks --cluster \$cluster --query "taskArns" --output text 2>/dev/null || echo "")
+    if [ -n "\$remaining_tasks" ] && [ "\$remaining_tasks" != "None" ]; then
+      echo "Aún hay tareas pendientes. Intentando forzar la detención..."
+      for task in \$(echo \$remaining_tasks | tr '\t' '\n'); do
+        if [ -n "\$task" ]; then
+          echo "Forzando detención de tarea: \$task"
+          aws ecs stop-task --cluster \$cluster --task \$task || true
+        fi
+      done
+      echo "Esperando 20 segundos antes de intentar eliminar el clúster nuevamente..."
+      sleep 20
+      aws ecs delete-cluster --cluster \$cluster || echo "⚠️ No se pudo eliminar el clúster \$cluster. Es posible que necesite eliminarlo manualmente."
+    else
+      echo "⚠️ No se pudo eliminar el clúster a pesar de no tener tareas visibles. Es posible que necesite eliminarlo manualmente."
+    fi
+  }
+}
 
-# Esperar a que los servicios se eliminen
-echo "Esperando a que los servicios se eliminen..."
-sleep 30
-
-# Eliminar clúster ECS
-echo "Eliminando clúster ECS: \$CLUSTER_NAME"
-aws ecs delete-cluster --cluster \$CLUSTER_NAME
+# Limpiar recursos ECS
+cleanup_ecs_resources "\$CLUSTER_NAME"
 
 # Eliminar el listener
 echo "Eliminando listener: \$ALB_LISTENER_ARN"
-aws elbv2 delete-listener --listener-arn \$ALB_LISTENER_ARN
+aws elbv2 delete-listener --listener-arn \$ALB_LISTENER_ARN || echo "⚠️ No se pudo eliminar el listener"
 
 # Eliminar los target groups
 echo "Eliminando target groups..."
 aws elbv2 describe-target-groups --query "TargetGroups[?LoadBalancerArns[0]=='\$ALB_ARN'].TargetGroupArn" --output text | tr '\t' '\n' | while read tg; do
-  echo "Eliminando target group: \$tg"
-  aws elbv2 delete-target-group --target-group-arn \$tg
+  if [ -n "\$tg" ]; then
+    echo "Eliminando target group: \$tg"
+    aws elbv2 delete-target-group --target-group-arn \$tg || echo "⚠️ No se pudo eliminar el target group \$tg"
+  fi
 done
 
 # Eliminar el ALB
 echo "Eliminando ALB: \$ALB_ARN"
-aws elbv2 delete-load-balancer --load-balancer-arn \$ALB_ARN
+aws elbv2 delete-load-balancer --load-balancer-arn \$ALB_ARN || echo "⚠️ No se pudo eliminar el ALB"
 
 # Esperar a que el ALB se elimine
 echo "Esperando a que el ALB se elimine..."
@@ -753,18 +514,42 @@ sleep 30
 
 # Eliminar security groups
 echo "Eliminando security group de ECS: \$ECS_SG_ID"
-aws ec2 delete-security-group --group-id \$ECS_SG_ID
+aws ec2 delete-security-group --group-id \$ECS_SG_ID || echo "⚠️ No se pudo eliminar el security group de ECS"
 
-echo "Eliminando security group de ALB: ${alb_sg_id}"
-aws ec2 delete-security-group --group-id "${alb_sg_id}"
+echo "Eliminando security group de ALB: \$ALB_SG_ID"
+aws ec2 delete-security-group --group-id \$ALB_SG_ID || echo "⚠️ No se pudo eliminar el security group del ALB"
 
-echo "Eliminando la tabla DynamoDB: ${dynamodb_table}"
-aws dynamodb delete-table --table-name "${dynamodb_table}" --region "${AWS_REGION}"
+echo "Eliminando la tabla DynamoDB: \$DYNAMODB_TABLE"
+aws dynamodb delete-table --table-name "\$DYNAMODB_TABLE" --region "\$AWS_REGION" || echo "⚠️ No se pudo eliminar la tabla DynamoDB"
 
 # Eliminar el bucket S3 (primero hay que vaciarlo)
-echo "Vaciando y eliminando bucket S3: ${bucket_name}"
-aws s3 rm "s3://${bucket_name}" --recursive
-aws s3 rb "s3://${bucket_name}" --force
+echo "Vaciando y eliminando bucket S3: \$BUCKET_NAME"
+if aws s3 ls "s3://\$BUCKET_NAME" &>/dev/null; then
+  echo "Vaciando el bucket \$BUCKET_NAME..."
+  # Eliminar versiones antiguas y marcadores de eliminación
+  aws s3api list-object-versions --bucket "\$BUCKET_NAME" --output text --query 'DeleteMarkers[].{Key:Key,VersionId:VersionId}' | while read key versionid; do
+    if [ ! -z "\$key" ] && [ ! -z "\$versionid" ]; then
+      echo "Eliminando objeto con clave \$key (marcador de eliminación, versión \$versionid)"
+      aws s3api delete-object --bucket "\$BUCKET_NAME" --key "\$key" --version-id "\$versionid" || true
+    fi
+  done
+  
+  aws s3api list-object-versions --bucket "\$BUCKET_NAME" --output text --query 'Versions[].{Key:Key,VersionId:VersionId}' | while read key versionid; do
+    if [ ! -z "\$key" ] && [ ! -z "\$versionid" ]; then
+      echo "Eliminando objeto con clave \$key (versión \$versionid)"
+      aws s3api delete-object --bucket "\$BUCKET_NAME" --key "\$key" --version-id "\$versionid" || true
+    fi
+  done
+  
+  # Eliminar archivos restantes (por si acaso)
+  aws s3 rm "s3://\$BUCKET_NAME" --recursive --force || echo "⚠️ No se pudieron eliminar todos los objetos del bucket"
+  
+  # Eliminar el bucket
+  echo "Eliminando el bucket \$BUCKET_NAME..."
+  aws s3 rb "s3://\$BUCKET_NAME" --force || echo "⚠️ No se pudo eliminar el bucket S3"
+else
+  echo "El bucket \$BUCKET_NAME no existe o no es accesible"
+fi
 
 echo "Limpieza completada."
 EOF
@@ -784,8 +569,13 @@ EOF
     echo "Listener ARN: $listener_arn"
     echo "Clúster ECS: $cluster_name"
     echo ""
+    echo "Subredes PRIVADAS para ECS: ${private_subnets[*]}"
+    echo ""
     echo "Se ha generado un archivo 'terraform.tfvars' con los valores para probar el módulo."
     echo "También se ha generado el archivo 'backend.tf' para usar el estado remoto."
+    echo ""
+    echo "IMPORTANTE: El servicio ECS está configurado para usar solo subredes PRIVADAS."
+    echo "Esto significa que no tendrá acceso directo a Internet, y la comunicación ocurrirá a través del ALB."
     echo ""
     echo "Para usar el módulo, ejecuta:"
     echo "terraform init -reconfigure"

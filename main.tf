@@ -18,7 +18,15 @@ resource "aws_ecs_task_definition" "webapp" {
           protocol      = "tcp"
         }
       ],
-      environment = var.environment_variables
+      environment = var.environment_variables,
+      logConfiguration = {
+        logDriver = "awslogs",
+        options = {
+          "awslogs-group"         = var.cloudwatch_log_group_name,
+          "awslogs-region"        = data.aws_region.current.name,
+          "awslogs-stream-prefix" = var.service_name
+        }
+      }
     }
   ])
 
@@ -123,6 +131,7 @@ resource "aws_iam_role" "execution" {
   tags = var.common_tags
 }
 
+# Adjuntar política de ejecución de ECS para permisos para extraer imágenes y enviar logs
 resource "aws_iam_role_policy_attachment" "execution_policy" {
   role       = aws_iam_role.execution.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
@@ -186,3 +195,6 @@ resource "aws_appautoscaling_policy" "cpu" {
     scale_out_cooldown = var.autoscaling_config.scale_out_cooldown
   }
 }
+
+# Get current AWS region
+data "aws_region" "current" {}

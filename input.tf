@@ -29,7 +29,7 @@ variable "task_memory" {
 }
 
 variable "subnet_ids" {
-  description = "IDs of the private subnets for ECS tasks"
+  description = "IDs of private subnets for ECS tasks. IMPORTANT: Must be private subnets as tasks are configured without public IPs (assign_public_ip = false) and need to access the internet through a NAT Gateway to download Docker images"
   type        = list(string)
 }
 
@@ -135,4 +135,10 @@ variable "enable_deployment_circuit_breaker" {
   description = "Whether to enable the deployment circuit breaker with rollback"
   type        = bool
   default     = false
+}
+
+variable "cloudwatch_log_group_name" {
+  description = "Full name of the CloudWatch Log Group to use (e.g. /ecs/service-name)"
+  type        = string
+  default     = null
 } 

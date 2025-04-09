@@ -27,6 +27,7 @@ This module creates an ECS Fargate service for deploying web applications with l
 | force_new_deployment           | bool          | Force a new deployment of the service                        | no       |
 | deployment_config              | object        | [Deployment configuration](#deployment-config)               | yes      |
 | enable_deployment_circuit_breaker | bool       | Enable deployment circuit breaker with rollback              | no       |
+| cloudwatch_log_group_name      | string        | Full name of the CloudWatch Log Group to use (e.g. /ecs/service-name) | no |
 
 ### Environment Variables
 
@@ -170,7 +171,29 @@ The module includes scripts to facilitate local testing:
 
 ### Setting up the test environment
 
-1. Run the setup script to create all necessary AWS resources:
+1. (Optional) Create a `.env` file to customize your test environment:
+
+```bash
+# Copy from the .env.example file
+cp .env.example .env
+```
+
+2. Customize the `.env` file with your preferred settings. You can define:
+   - AWS region
+   - Docker image to use for testing
+   - Container port
+   - Target group port
+   - VPC and subnet IDs (optional)
+
+```bash
+# Example .env configuration
+AWS_REGION=us-east-1
+DOCKER_IMAGE=nginx:latest
+CONTAINER_PORT=80
+TARGET_GROUP_PORT=80
+```
+
+3. Run the setup script to create all necessary AWS resources:
 
 ```bash
 ./setup-test-infra.sh
@@ -181,7 +204,9 @@ This script will:
 - Set up an Application Load Balancer
 - Create security groups
 - Create an ECS cluster
+- Create a CloudWatch Log Group for the ECS service
 - Generate a `terraform.tfvars` file with all required values
+- Generate a cleanup script to remove all resources later
 
 ### Running tests
 
@@ -197,12 +222,42 @@ The `-reconfigure` flag is necessary because the backend configuration may chang
 
 ### Testing with different container port and ALB port
 
-If your application container listens on a non-standard port (e.g., 3000), but you want to expose it via the ALB on port 80, modify the generated `terraform.tfvars` file:
+If your application container listens on a non-standard port (e.g., 3000), but you want to expose it via the ALB on port 80, you can:
+
+1. Set the variables in your `.env` file:
+
+```bash
+DOCKER_IMAGE=my-application:latest
+CONTAINER_PORT=3000
+TARGET_GROUP_PORT=80
+```
+
+2. Or modify the generated `terraform.tfvars` file after running the setup script:
 
 ```hcl
 container_port = 3000      # Port your application listens on
 target_group_port = 80     # Port the ALB will forward traffic from
 ```
+
+### Network Configuration
+
+The ECS service is configured to use only **private subnets**. This ensures your containers aren't directly accessible from the internet, and all traffic flows through the Application Load Balancer.
+
+### CloudWatch Logs
+
+All ECS tasks automatically send their logs to CloudWatch. The module expects an existing CloudWatch Log Group to be available before deploying the ECS service.
+
+The recommended setup is to:
+
+1. Create the CloudWatch Log Group using the `setup-test-infra.sh` script or manually before deploying
+2. Pass the log group name to the module using the `cloudwatch_log_group_name` variable
+
+```hcl
+# Example:
+cloudwatch_log_group_name = "/ecs/my-service"
+```
+
+This approach prevents `ResourceInitializationError` when the container tries to write logs to a non-existent log group.
 
 ### Cleaning up
 
@@ -212,4 +267,26 @@ To remove all test resources:
 ./cleanup-test-infra.sh
 ```
 
-This will delete all AWS resources created for testing. 
+This will:
+- Stop and delete all ECS tasks and services
+- Remove the ECS cluster
+- Delete all load balancer components
+- Remove security groups
+- Delete the S3 bucket used for Terraform state (including all versions)
+- Remove the DynamoDB table used for state locking 
+
+## Private Subnets for ECS Tasks
+
+This module configures ECS tasks without public IP addresses (`assign_public_ip = false`). Therefore, it is **mandatory** to provide private subnets in the `subnet_ids` variable.
+
+### Why Private Subnets?
+
+1. **Security**: Private subnets are not directly accessible from the Internet.
+2. **Correct Architecture**: ECS tasks should be in private subnets that can access the Internet through a NAT Gateway.
+3. **Docker Image Downloads**: Although tasks don't have a public IP, they need to access the Internet to download Docker images, which is accomplished through the NAT Gateway.
+
+If public subnets are used without assigning a public IP, the tasks will not start correctly because they won't be able to download Docker images or communicate with other AWS services.
+
+**Recommended Network Configuration:**
+- **ALB**: In public subnets
+- **ECS Tasks**: In private subnets with Internet access through a NAT Gateway 
