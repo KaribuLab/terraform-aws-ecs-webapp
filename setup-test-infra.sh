@@ -271,9 +271,13 @@ task_memory    = "512"
 # ECS tasks need to be in private subnets to properly communicate with other AWS services
 # and download Docker images through the NAT Gateway, as they are configured without public IPs
 subnet_ids     = [$(printf '"%s",' "${private_subnets[@]}" | sed 's/,$//')]
-security_group_ids = ["${ecs_sg_id}"]
 vpc_id         = "${VPC_ID}"
 alb_listener_arn = "${listener_arn}"
+
+# Configuración de seguridad
+alb_security_group_id = "${alb_sg_id}"  # ID del security group del ALB
+create_security_group_rules = true
+# allowed_cidr_blocks = ["0.0.0.0/0"]  # Descomentarlo si necesitas acceso desde Internet
 
 # Configuración de CloudWatch logs
 cloudwatch_log_group_name = "${log_group_name}"

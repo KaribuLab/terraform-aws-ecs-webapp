@@ -27,3 +27,8 @@ output "service_name" {
   description = "Name of the ECS service"
   value       = var.service_name
 } 
+
+output "security_group_id" {
+  description = "ID of the security group used for the ECS service"
+  value       = aws_security_group.ecs_service.id
+} 

@@ -33,11 +33,6 @@ variable "subnet_ids" {
   type        = list(string)
 }
 
-variable "security_group_ids" {
-  description = "Security Groups for the ECS service"
-  type        = list(string)
-}
-
 variable "vpc_id" {
   description = "VPC ID where the Target Group will be created"
   type        = string
@@ -45,6 +40,11 @@ variable "vpc_id" {
 
 variable "alb_listener_arn" {
   description = "ARN of the ALB listener (HTTP or HTTPS)"
+  type        = string
+}
+
+variable "alb_security_group_id" {
+  description = "ID del security group del Application Load Balancer"
   type        = string
 }
 

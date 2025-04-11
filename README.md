@@ -13,9 +13,9 @@ This module creates an ECS Fargate service for deploying web applications with l
 | task_cpu                       | string        | Amount of CPU for the ECS task (in CPU units)                | yes      |
 | task_memory                    | string        | Amount of memory for the ECS task (in MiB)                   | yes      |
 | subnet_ids                     | list(string)  | IDs of the private subnets for ECS tasks                     | yes      |
-| security_group_ids             | list(string)  | Security Groups for the ECS service                          | yes      |
-| vpc_id                         | string        | VPC ID where the Target Group will be created                | yes      |
+| vpc_id                         | string        | VPC ID where resources will be created                       | yes      |
 | alb_listener_arn               | string        | ARN of the ALB listener (HTTP or HTTPS)                      | yes      |
+| alb_security_group_id          | string        | ID del security group del Application Load Balancer          | yes      |
 | environment_variables          | list(object)  | [Environment variables](#environment-variables) to pass to the container | no |
 | health_check                   | object        | [Health check configuration](#health-check)                  | yes      |
 | listener_rules                 | list(object)  | [List of listener rules](#listener-rules)                    | no       |
@@ -80,35 +80,27 @@ This module creates an ECS Fargate service for deploying web applications with l
 | iam_execution_role_arn  | string | ARN of the ECS execution role               |
 | cluster_name            | string | Name of the ECS cluster                     |
 | service_name            | string | Name of the ECS service                     |
-| security_group_id       | string | ID of the security group created for the ECS service (if created) |
+| security_group_id       | string | ID of the security group used for the ECS service |
 
-## Usage Example
+## Ejemplos adicionales
 
+### Configuraciones comunes
+
+#### Despliegue básico
 ```hcl
-module "webapp" {
+module "ecs_webapp" {
   source = "github.com/your-username/terraform-aws-ecs-webapp"
 
-  cluster_name       = "my-cluster"
-  service_name       = "app-frontend"
-  docker_image       = "123456789012.dkr.ecr.us-east-1.amazonaws.com/frontend:latest"
-  container_port     = 3000
-  task_cpu           = "256"
-  task_memory        = "512"
-  vpc_id             = module.vpc.vpc_id
-  subnet_ids         = module.vpc.private_subnets
-  security_group_ids = [aws_security_group.ecs_tasks.id]
-  alb_listener_arn   = module.alb.http_listener_arn
-  
-  environment_variables = [
-    {
-      name  = "NODE_ENV"
-      value = "production"
-    },
-    {
-      name  = "API_URL"
-      value = "https://api.example.com"
-    }
-  ]
+  cluster_name        = "my-cluster"
+  service_name        = "my-webapp"
+  docker_image        = "123456789012.dkr.ecr.us-east-1.amazonaws.com/my-image:latest"
+  container_port      = 80
+  task_cpu            = "256"
+  task_memory         = "512"
+  subnet_ids          = ["subnet-abcdef", "subnet-123456"]
+  vpc_id              = "vpc-abcdef123"
+  alb_listener_arn    = "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/app/my-alb/abcdef/123456789"
+  alb_security_group_id = "sg-alb123456"  # ID del security group del ALB
 
   health_check = {
     path                = "/"
@@ -121,7 +113,7 @@ module "webapp" {
 
   autoscaling_config = {
     min_capacity       = 1
-    max_capacity       = 4
+    max_capacity       = 2
     target_value       = 50
     scale_in_cooldown  = 60
     scale_out_cooldown = 60
@@ -132,29 +124,37 @@ module "webapp" {
     minimum_healthy_percent = 100
   }
 
-  task_policy_json = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "s3:GetObject",
-          "s3:ListBucket"
-        ],
-        Resource = [
-          "arn:aws:s3:::my-bucket",
-          "arn:aws:s3:::my-bucket/*"
-        ]
-      }
-    ]
-  })
-
   common_tags = {
     Project     = "MyProject"
     Environment = "production"
-    Terraform   = "true"
   }
-} 
+}
+```
+
+#### Reglas de seguridad personalizadas
+```hcl
+module "ecs_webapp" {
+  source = "github.com/your-username/terraform-aws-ecs-webapp"
+
+  // ... configuración básica ...
+
+  # Reglas de seguridad
+  alb_security_group_id = "sg-alb123456"  # ID del security group del ALB
+
+  // ... otras configuraciones ...
+}
+```
+
+### Security Group Configuration
+
+El módulo ahora siempre crea un security group dedicado para el servicio ECS y configura automáticamente las reglas de ingreso, lo que simplifica la configuración y mejora la seguridad.
+
+El security group permite tráfico únicamente desde el ALB al puerto del contenedor:
+
+```hcl
+# Configuración del security group para permitir tráfico desde el ALB
+alb_security_group_id = "sg-alb123456"  # ID del security group del ALB
+```
 
 ## Local Testing
 

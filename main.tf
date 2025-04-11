@@ -42,7 +42,7 @@ resource "aws_ecs_service" "webapp" {
 
   network_configuration {
     subnets         = var.subnet_ids
-    security_groups = var.security_group_ids
+    security_groups = [aws_security_group.ecs_service.id]
     assign_public_ip = false
   }
 
@@ -198,3 +198,33 @@ resource "aws_appautoscaling_policy" "cpu" {
 
 # Get current AWS region
 data "aws_region" "current" {}
+
+# Security Group for ECS Service
+resource "aws_security_group" "ecs_service" {
+  name        = "${var.service_name}-sg"
+  description = "Security group for ECS service ${var.service_name}"
+  vpc_id      = var.vpc_id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow all outbound traffic"
+  }
+
+  tags = merge(var.common_tags, {
+    Name = "${var.service_name}-sg"
+  })
+}
+
+# Security Group Rules for ECS Service
+resource "aws_security_group_rule" "webapp" {
+  type                     = "ingress"
+  from_port                = var.container_port
+  to_port                  = var.container_port
+  protocol                 = "tcp"
+  source_security_group_id = var.alb_security_group_id
+  security_group_id        = aws_security_group.ecs_service.id
+  description              = "Allow traffic from ALB security group (${var.alb_security_group_id}) to container port ${var.container_port}"
+}
