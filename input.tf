@@ -137,12 +137,6 @@ variable "cloudwatch_log_group_name" {
   default     = null
 }
 
-variable "ecr_repository" {
-  description = "ECR repository name"
-  type        = string
-}
-
-
 variable "image_tag" {
   description = "Image tag"
   type        = string

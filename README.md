@@ -8,8 +8,8 @@ This module creates an ECS Fargate service for deploying web applications with l
 | ------------------------------ | ------------- | ------------------------------------------------------------ | -------- |
 | cluster_name                   | string        | Name of the ECS Cluster                                      | yes      |
 | service_name                   | string        | Name of the ECS service                                      | yes      |
-| ecr_repository                 | string        | ECR repository name                                          | yes      |
-| image_tag                      | string        | Image tag                                                    | no       |
+| docker_image                   | string        | Docker image in ECR (repository URL without tag)             | yes      |
+| image_tag                      | string        | Image tag (default: "latest")                                | no       |
 | container_port                 | number        | Port exposed by the container                                | yes      |
 | task_cpu                       | string        | Amount of CPU for the ECS task (in CPU units)                | yes      |
 | task_memory                    | string        | Amount of memory for the ECS task (in MiB)                   | yes      |
@@ -94,7 +94,7 @@ module "ecs_webapp" {
 
   cluster_name        = "my-cluster"
   service_name        = "my-webapp"
-  ecr_repository      = "my-app-repository"
+  docker_image        = "123456789012.dkr.ecr.us-east-1.amazonaws.com/my-repository"
   image_tag           = "v1.0.0"
   container_port      = 80
   task_cpu            = "256"
@@ -179,7 +179,7 @@ cp .env.example .env
 
 2. Customize the `.env` file with your preferred settings. You can define:
    - AWS region
-   - ECR repository and image tag for testing (will be combined as `ECR_REPOSITORY:IMAGE_TAG`)
+   - Docker image repository and image tag for testing
    - Container port
    - Target group port
    - VPC and subnet IDs (optional)
@@ -187,7 +187,7 @@ cp .env.example .env
 ```bash
 # Example .env configuration
 AWS_REGION=us-east-1
-ECR_REPOSITORY=my-app
+DOCKER_IMAGE=123456789012.dkr.ecr.us-east-1.amazonaws.com/my-repository
 IMAGE_TAG=latest
 CONTAINER_PORT=80
 TARGET_GROUP_PORT=80
@@ -227,13 +227,13 @@ The target group and the load balancer will always forward traffic to the same p
 If your application container listens on a non-standard port (e.g., 3000), simply set the container port in your `.env` file:
 
 ```bash
-# Configuración para el repositorio de ECR y el puerto del contenedor
-ECR_REPOSITORY=my-application
-IMAGE_TAG=v1.0.0
+# Configuración para la imagen Docker y el puerto del contenedor
+DOCKER_IMAGE=123456789012.dkr.ecr.us-east-1.amazonaws.com/my-application
+IMAGE_TAG=v1.0.0  # El módulo utilizará DOCKER_IMAGE:IMAGE_TAG 
 CONTAINER_PORT=3000
 ```
 
-The module will automatically construct the complete Docker image URL (`my-application:v1.0.0`) and configure the target group to forward traffic to port 3000.
+The module will combine the Docker image repository and tag (`DOCKER_IMAGE:IMAGE_TAG`) and configure the target group to forward traffic to port 3000.
 
 ### Network Configuration
 
