@@ -35,9 +35,14 @@ if [ -z "$AWS_REGION" ]; then
 fi
 
 # Verificar si DOCKER_IMAGE está definido, si no, usar valor predeterminado
-if [ -z "$DOCKER_IMAGE" ]; then
-    echo "Variable DOCKER_IMAGE no definida, usando valor predeterminado: nginx:latest"
-    export DOCKER_IMAGE="nginx:latest"
+if [ -z "$ECR_REPOSITORY" ]; then
+    echo "Variable ECR_REPOSITORY no definida, usando valor predeterminado: nginx"
+    export ECR_REPOSITORY="nginx"
+fi
+
+if [ -z "$IMAGE_TAG" ]; then
+    echo "Variable IMAGE_TAG no definida, usando valor predeterminado: latest"
+    export IMAGE_TAG="latest"
 fi
 
 # Verificar si CONTAINER_PORT está definido, si no, usar valor predeterminado
@@ -46,7 +51,8 @@ if [ -z "$CONTAINER_PORT" ]; then
     export CONTAINER_PORT="80"
 fi
 
-echo "Usando imagen Docker: $DOCKER_IMAGE"
+echo "Usando repositorio ECR: $ECR_REPOSITORY"
+echo "Usando tag de imagen: $IMAGE_TAG"
 echo "Usando puerto de contenedor: $CONTAINER_PORT"
 
 # Verificar si las variables VPC_ID, PUBLIC_SUBNET_IDS, y PRIVATE_SUBNET_IDS están definidas
@@ -257,7 +263,7 @@ else
 # Configuración básica del servicio
 cluster_name   = "${cluster_name}"
 service_name   = "test-service"
-docker_image   = "${DOCKER_IMAGE}"
+docker_image   = "${ECR_REPOSITORY}:${IMAGE_TAG}"
 
 # Configuración de puertos
 container_port = ${CONTAINER_PORT}
@@ -276,8 +282,6 @@ alb_listener_arn = "${listener_arn}"
 
 # Configuración de seguridad
 alb_security_group_id = "${alb_sg_id}"  # ID del security group del ALB
-create_security_group_rules = true
-# allowed_cidr_blocks = ["0.0.0.0/0"]  # Descomentarlo si necesitas acceso desde Internet
 
 # Configuración de CloudWatch logs
 cloudwatch_log_group_name = "${log_group_name}"

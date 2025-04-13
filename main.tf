@@ -1,8 +1,3 @@
-data "aws_ecr_image" "app" {
-  repository_name = var.ecr_repository
-  image_tag       = var.image_tag
-}
-
 resource "aws_ecs_task_definition" "webapp" {
   family                   = var.service_name
   requires_compatibilities = ["FARGATE"]
@@ -15,7 +10,7 @@ resource "aws_ecs_task_definition" "webapp" {
   container_definitions = jsonencode([
     {
       name      = var.service_name,
-      image     = data.aws_ecr_image.app.image_digest,
+      image     = "${var.ecr_repository}:${var.image_tag}",
       essential = true,
       portMappings = [
         {

@@ -8,6 +8,11 @@ variable "service_name" {
   type        = string
 }
 
+variable "docker_image" {
+  description = "Docker image in ECR"
+  type        = string
+}
+
 variable "container_port" {
   description = "Port exposed by the container"
   type        = number
@@ -45,11 +50,11 @@ variable "alb_security_group_id" {
 
 variable "environment_variables" {
   description = "Environment variables to pass to the container"
-  type = list(object({
+  type        = list(object({
     name  = string
     value = string
   }))
-  default = []
+  default     = []
 }
 
 variable "health_check" {
@@ -67,7 +72,7 @@ variable "health_check" {
 variable "listener_rules" {
   description = "List of listener rules"
   type = list(object({
-    priority      = number
+    priority = number
     path_patterns = list(string)
   }))
   default = [

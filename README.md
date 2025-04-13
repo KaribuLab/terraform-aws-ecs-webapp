@@ -179,7 +179,7 @@ cp .env.example .env
 
 2. Customize the `.env` file with your preferred settings. You can define:
    - AWS region
-   - ECR repository and image tag for testing
+   - ECR repository and image tag for testing (will be combined as `ECR_REPOSITORY:IMAGE_TAG`)
    - Container port
    - Target group port
    - VPC and subnet IDs (optional)
@@ -229,11 +229,11 @@ If your application container listens on a non-standard port (e.g., 3000), simpl
 ```bash
 # Configuración para el repositorio de ECR y el puerto del contenedor
 ECR_REPOSITORY=my-application
-IMAGE_TAG=latest
+IMAGE_TAG=v1.0.0
 CONTAINER_PORT=3000
 ```
 
-The module will automatically configure the target group to forward traffic to port 3000.
+The module will automatically construct the complete Docker image URL (`my-application:v1.0.0`) and configure the target group to forward traffic to port 3000.
 
 ### Network Configuration
 
