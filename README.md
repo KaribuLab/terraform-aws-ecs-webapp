@@ -8,7 +8,8 @@ This module creates an ECS Fargate service for deploying web applications with l
 | ------------------------------ | ------------- | ------------------------------------------------------------ | -------- |
 | cluster_name                   | string        | Name of the ECS Cluster                                      | yes      |
 | service_name                   | string        | Name of the ECS service                                      | yes      |
-| docker_image                   | string        | Docker image in ECR                                          | yes      |
+| ecr_repository                 | string        | ECR repository name                                          | yes      |
+| image_tag                      | string        | Image tag                                                    | no       |
 | container_port                 | number        | Port exposed by the container                                | yes      |
 | task_cpu                       | string        | Amount of CPU for the ECS task (in CPU units)                | yes      |
 | task_memory                    | string        | Amount of memory for the ECS task (in MiB)                   | yes      |
@@ -93,7 +94,8 @@ module "ecs_webapp" {
 
   cluster_name        = "my-cluster"
   service_name        = "my-webapp"
-  docker_image        = "123456789012.dkr.ecr.us-east-1.amazonaws.com/my-image:latest"
+  ecr_repository      = "my-app-repository"
+  image_tag           = "v1.0.0"
   container_port      = 80
   task_cpu            = "256"
   task_memory         = "512"
@@ -177,7 +179,7 @@ cp .env.example .env
 
 2. Customize the `.env` file with your preferred settings. You can define:
    - AWS region
-   - Docker image to use for testing
+   - ECR repository and image tag for testing
    - Container port
    - Target group port
    - VPC and subnet IDs (optional)
@@ -185,7 +187,8 @@ cp .env.example .env
 ```bash
 # Example .env configuration
 AWS_REGION=us-east-1
-DOCKER_IMAGE=nginx:latest
+ECR_REPOSITORY=my-app
+IMAGE_TAG=latest
 CONTAINER_PORT=80
 TARGET_GROUP_PORT=80
 ```
@@ -224,7 +227,9 @@ The target group and the load balancer will always forward traffic to the same p
 If your application container listens on a non-standard port (e.g., 3000), simply set the container port in your `.env` file:
 
 ```bash
-DOCKER_IMAGE=my-application:latest
+# Configuración para el repositorio de ECR y el puerto del contenedor
+ECR_REPOSITORY=my-application
+IMAGE_TAG=latest
 CONTAINER_PORT=3000
 ```
 
