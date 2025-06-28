@@ -50,11 +50,11 @@ variable "alb_security_group_id" {
 
 variable "environment_variables" {
   description = "Environment variables to pass to the container"
-  type        = list(object({
+  type = list(object({
     name  = string
     value = string
   }))
-  default     = []
+  default = []
 }
 
 variable "health_check" {
@@ -72,7 +72,7 @@ variable "health_check" {
 variable "listener_rules" {
   description = "List of listener rules"
   type = list(object({
-    priority = number
+    priority      = number
     path_patterns = list(string)
   }))
   default = [
@@ -86,12 +86,23 @@ variable "listener_rules" {
 variable "autoscaling_config" {
   description = "Auto scaling configuration"
   type = object({
-    min_capacity       = number
-    max_capacity       = number
-    target_value       = number
-    scale_in_cooldown  = number
-    scale_out_cooldown = number
+    min_capacity = number
+    max_capacity = number
+    memory = optional(object({
+      target_value       = number
+      scale_in_cooldown  = number
+      scale_out_cooldown = number
+    }))
+    cpu = optional(object({
+      target_value       = number
+      scale_in_cooldown  = number
+      scale_out_cooldown = number
+    }))
   })
+  validation {
+    condition = var.autoscaling_config.memory != null || var.autoscaling_config.cpu != null
+    error_message = "At least one of memory or cpu must be provided"
+  }
 }
 
 variable "common_tags" {
