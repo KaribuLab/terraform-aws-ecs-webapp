@@ -179,6 +179,7 @@ resource "aws_appautoscaling_target" "ecs" {
 }
 
 resource "aws_appautoscaling_policy" "cpu" {
+  count = var.autoscaling_config.cpu != null ? 1 : 0
   name               = "cpu-scaling-policy-${var.service_name}"
   policy_type        = "TargetTrackingScaling"
   resource_id        = aws_appautoscaling_target.ecs.resource_id
@@ -197,6 +198,7 @@ resource "aws_appautoscaling_policy" "cpu" {
 }
 
 resource "aws_appautoscaling_policy" "memory" {
+  count = var.autoscaling_config.memory != null ? 1 : 0
   name               = "memory-scaling-policy-${var.service_name}"
   policy_type        = "TargetTrackingScaling"
   resource_id        = aws_appautoscaling_target.ecs.resource_id
