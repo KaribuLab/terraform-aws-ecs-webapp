@@ -1,6 +1,6 @@
 # Terraform AWS ECS WebApp
 
-This module creates an ECS Fargate service for deploying web applications with load balancing.
+Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con balanceo de carga.
 
 ## Inputs
 
@@ -8,7 +8,7 @@ This module creates an ECS Fargate service for deploying web applications with l
 | --------------------------------- | ------------ | ------------------------------------------------------------------------ | -------- |
 | cluster_name                      | string       | Name of the ECS Cluster                                                  | yes      |
 | service_name                      | string       | Name of the ECS service                                                  | yes      |
-| docker_image                      | string       | Docker image in ECR (repository URL without tag)                         | yes      |
+| docker_image                      | string       | Docker image in ECR                                                      | yes      |
 | image_tag                         | string       | Image tag (default: "latest")                                            | no       |
 | container_port                    | number       | Port exposed by the container                                            | yes      |
 | task_cpu                          | string       | Amount of CPU for the ECS task (in CPU units)                            | yes      |
@@ -17,6 +17,7 @@ This module creates an ECS Fargate service for deploying web applications with l
 | vpc_id                            | string       | VPC ID where resources will be created                                   | yes      |
 | alb_listener_arn                  | string       | ARN of the ALB listener (HTTP or HTTPS)                                  | yes      |
 | alb_security_group_id             | string       | ID of the Application Load Balancer security group                       | yes      |
+| service_discovery                 | object       | Service Discovery configuration for the ECS service                      | no       |
 | environment_variables             | list(object) | [Environment variables](#environment-variables) to pass to the container | no       |
 | health_check                      | object       | [Health check configuration](#health-check)                              | yes      |
 | listener_rules                    | list(object) | [List of listener rules](#listener-rules)                                | no       |
@@ -35,6 +36,21 @@ This module creates an ECS Fargate service for deploying web applications with l
 | ----- | ------ | --------------------------------- | -------- |
 | name  | string | Name of the environment variable  | yes      |
 | value | string | Value of the environment variable | yes      |
+
+### Service Discovery Configuration
+
+| Name        | Type   | Description                                  | Required |
+| ----------- | ------ | -------------------------------------------- | -------- |
+| namespace_id | string | ID of the Service Discovery namespace        | yes      |
+| dns         | object | [DNS configuration](#dns-configuration)      | yes      |
+
+#### DNS Configuration
+
+| Name | Type   | Description                                     | Required |
+| ---- | ------ | ----------------------------------------------- | -------- |
+| name | string | DNS name for the service                        | yes      |
+| type | string | Type of DNS record (e.g., A, SRV)               | yes      |
+| ttl  | number | Time-to-live value for the DNS record (seconds) | yes      |
 
 ### Health Check
 
@@ -171,6 +187,26 @@ module "ecs_webapp" {
       target_value       = 80
       scale_in_cooldown  = 300
       scale_out_cooldown = 60
+    }
+  }
+
+  // ... otras configuraciones ...
+}
+```
+
+#### Configuración con Service Discovery
+```hcl
+module "ecs_webapp" {
+  source = "github.com/your-username/terraform-aws-ecs-webapp"
+
+  // ... configuración básica ...
+
+  service_discovery = {
+    namespace_id = "ns-abc123def456"
+    dns = {
+      name = "api"
+      type = "A"
+      ttl  = 300
     }
   }
 

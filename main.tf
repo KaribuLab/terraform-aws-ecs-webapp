@@ -33,6 +33,27 @@ resource "aws_ecs_task_definition" "webapp" {
   tags = var.common_tags
 }
 
+resource "aws_service_discovery_service" "webapp" {
+  count = var.service_discovery != null ? 1 : 0
+  name = var.service_discovery.dns.name
+
+  dns_config {
+    namespace_id = var.service_discovery.namespace_id
+
+    dns_records {
+      type = var.service_discovery.dns.type
+      ttl  = var.service_discovery.dns.ttl
+    }
+
+    routing_policy = "MULTIVALUE"
+  }
+
+  health_check_custom_config {
+    failure_threshold = 1
+  }
+}
+
+
 resource "aws_ecs_service" "webapp" {
   name            = var.service_name
   cluster         = var.cluster_name
@@ -44,6 +65,10 @@ resource "aws_ecs_service" "webapp" {
     subnets         = var.subnet_ids
     security_groups = [aws_security_group.ecs_service.id]
     assign_public_ip = false
+  }
+
+  service_registries {
+    registry_arn = var.service_discovery != null ? aws_service_discovery_service.webapp[0].arn : null
   }
 
   load_balancer {

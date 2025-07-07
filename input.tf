@@ -48,6 +48,19 @@ variable "alb_security_group_id" {
   type        = string
 }
 
+variable "service_discovery" {
+  description = "ID of the Service Discovery namespace"
+  type = optional(object({
+    namespace_id   = string
+    dns = object({
+      name = string
+      type = string
+      ttl  = number
+    })
+  }))
+  default = null
+}
+
 variable "environment_variables" {
   description = "Environment variables to pass to the container"
   type = list(object({
@@ -100,7 +113,7 @@ variable "autoscaling_config" {
     }))
   })
   validation {
-    condition = var.autoscaling_config.memory != null || var.autoscaling_config.cpu != null
+    condition     = var.autoscaling_config.memory != null || var.autoscaling_config.cpu != null
     error_message = "At least one of memory or cpu must be provided"
   }
 }
