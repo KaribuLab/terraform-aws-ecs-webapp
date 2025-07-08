@@ -13,10 +13,10 @@ Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con ba
 | container_port                    | number       | Port exposed by the container                                            | yes      |
 | task_cpu                          | string       | Amount of CPU for the ECS task (in CPU units)                            | yes      |
 | task_memory                       | string       | Amount of memory for the ECS task (in MiB)                               | yes      |
-| subnet_ids                        | list(string) | IDs of the private subnets for ECS tasks                                 | yes      |
+| subnet_ids                        | list(string) | IDs of private subnets for ECS tasks. IMPORTANT: Must be private subnets as tasks are configured without public IPs | yes      |
 | vpc_id                            | string       | VPC ID where resources will be created                                   | yes      |
 | alb_listener_arn                  | string       | ARN of the ALB listener (HTTP or HTTPS)                                  | yes      |
-| alb_security_group_id             | string       | ID of the Application Load Balancer security group                       | yes      |
+| alb_security_group_id             | string       | ID del security group del Application Load Balancer                      | yes      |
 | service_discovery                 | object       | Service Discovery configuration for the ECS service                      | no       |
 | environment_variables             | list(object) | [Environment variables](#environment-variables) to pass to the container | no       |
 | health_check                      | object       | [Health check configuration](#health-check)                              | yes      |
@@ -68,7 +68,10 @@ Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con ba
 | Name          | Type         | Description                | Required |
 | ------------- | ------------ | -------------------------- | -------- |
 | priority      | number       | Rule priority              | yes      |
-| path_patterns | list(string) | Path patterns for the rule | yes      |
+| path_patterns | list(string) | Path patterns for the rule | no       |
+| host_headers  | list(string) | Host headers for the rule  | no       |
+
+Al menos uno de `path_patterns` o `host_headers` debe ser proporcionado.
 
 ### Autoscaling Config
 
@@ -189,6 +192,28 @@ module "ecs_webapp" {
       scale_out_cooldown = 60
     }
   }
+
+  // ... otras configuraciones ...
+}
+```
+
+#### Configuración con reglas de listener personalizadas
+```hcl
+module "ecs_webapp" {
+  source = "github.com/your-username/terraform-aws-ecs-webapp"
+
+  // ... configuración básica ...
+
+  listener_rules = [
+    {
+      priority      = 100
+      path_patterns = ["/api/*"]
+    },
+    {
+      priority     = 200
+      host_headers = ["api.example.com"]
+    }
+  ]
 
   // ... otras configuraciones ...
 }

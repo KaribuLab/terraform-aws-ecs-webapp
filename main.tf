@@ -35,7 +35,7 @@ resource "aws_ecs_task_definition" "webapp" {
 
 resource "aws_service_discovery_service" "webapp" {
   count = var.service_discovery != null ? 1 : 0
-  name = var.service_discovery.dns.name
+  name  = var.service_discovery.dns.name
 
   dns_config {
     namespace_id = var.service_discovery.namespace_id
@@ -62,8 +62,8 @@ resource "aws_ecs_service" "webapp" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets         = var.subnet_ids
-    security_groups = [aws_security_group.ecs_service.id]
+    subnets          = var.subnet_ids
+    security_groups  = [aws_security_group.ecs_service.id]
     assign_public_ip = false
   }
 
@@ -130,7 +130,10 @@ resource "aws_lb_listener_rule" "webapp" {
 
   condition {
     path_pattern {
-      values = each.value.path_patterns
+      values = each.value.path_patterns != null ? each.value.path_patterns : []
+    }
+    host_header {
+      values = each.value.host_headers != null ? each.value.host_headers : []
     }
   }
 
@@ -165,7 +168,7 @@ resource "aws_iam_role_policy_attachment" "execution_policy" {
 # Rol de tarea específico que se crea solo si se proporciona una política JSON
 resource "aws_iam_role" "task" {
   count = var.task_policy_json != null ? 1 : 0
-  
+
   name = "${var.service_name}-role"
 
   assume_role_policy = jsonencode({
@@ -187,7 +190,7 @@ resource "aws_iam_role" "task" {
 # Política en línea que se crea solo si se proporciona una política JSON
 resource "aws_iam_role_policy" "task_policy" {
   count = var.task_policy_json != null ? 1 : 0
-  
+
   name   = "${var.service_name}-policy"
   role   = aws_iam_role.task[0].id
   policy = var.task_policy_json
@@ -204,7 +207,7 @@ resource "aws_appautoscaling_target" "ecs" {
 }
 
 resource "aws_appautoscaling_policy" "cpu" {
-  count = var.autoscaling_config.cpu != null ? 1 : 0
+  count              = var.autoscaling_config.cpu != null ? 1 : 0
   name               = "cpu-scaling-policy-${var.service_name}"
   policy_type        = "TargetTrackingScaling"
   resource_id        = aws_appautoscaling_target.ecs.resource_id
@@ -223,7 +226,7 @@ resource "aws_appautoscaling_policy" "cpu" {
 }
 
 resource "aws_appautoscaling_policy" "memory" {
-  count = var.autoscaling_config.memory != null ? 1 : 0
+  count              = var.autoscaling_config.memory != null ? 1 : 0
   name               = "memory-scaling-policy-${var.service_name}"
   policy_type        = "TargetTrackingScaling"
   resource_id        = aws_appautoscaling_target.ecs.resource_id

@@ -86,7 +86,8 @@ variable "listener_rules" {
   description = "List of listener rules"
   type = list(object({
     priority      = number
-    path_patterns = list(string)
+    path_patterns = optional(list(string))
+    host_headers  = optional(list(string))
   }))
   default = [
     {
@@ -94,6 +95,10 @@ variable "listener_rules" {
       path_patterns = ["/*"]
     }
   ]
+  validation {
+    condition     = var.listener_rules[0].path_patterns != null || var.listener_rules[0].host_headers != null
+    error_message = "At least one of path_patterns or host_headers must be provided"
+  }
 }
 
 variable "autoscaling_config" {
