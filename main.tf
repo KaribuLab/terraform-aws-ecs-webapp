@@ -68,9 +68,9 @@ resource "aws_ecs_service" "webapp" {
   }
 
   dynamic "service_registries" {
-    for_each = aws_service_discovery_service.webapp
+    for_each = var.service_discovery != null ? [1] : []
     content {
-      registry_arn = each.value.arn
+      registry_arn = aws_service_discovery_service.webapp[0].arn
     }
   }
 
