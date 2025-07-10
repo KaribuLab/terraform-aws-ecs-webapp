@@ -34,3 +34,4 @@ terraform.rc
 # Test files
 cleanup-test-infra.sh
 test.tfvars
+*.old
