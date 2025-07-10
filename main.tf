@@ -67,8 +67,11 @@ resource "aws_ecs_service" "webapp" {
     assign_public_ip = false
   }
 
-  service_registries {
-    registry_arn = var.service_discovery != null ? aws_service_discovery_service.webapp[0].arn : null
+  dynamic "service_registries" {
+    for_each = aws_service_discovery_service.webapp
+    content {
+      registry_arn = each.value.arn
+    }
   }
 
   load_balancer {

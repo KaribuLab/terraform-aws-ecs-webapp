@@ -50,14 +50,14 @@ variable "alb_security_group_id" {
 
 variable "service_discovery" {
   description = "ID of the Service Discovery namespace"
-  type = optional(object({
+  type = object({
     namespace_id   = string
     dns = object({
       name = string
       type = string
       ttl  = number
     })
-  }))
+  })
   default = null
 }
 
