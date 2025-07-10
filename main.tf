@@ -282,3 +282,17 @@ resource "aws_security_group_rule" "webapp" {
   security_group_id        = aws_security_group.ecs_service.id
   description              = "Allow traffic from ALB security group (${var.alb_security_group_id}) to container port ${var.container_port}"
 }
+
+data "aws_vpc" "main" {
+  id = var.vpc_id
+}
+
+resource "aws_security_group_rule" "vpc" {
+  type                     = "ingress"
+  from_port                = var.container_port
+  to_port                  = var.container_port
+  protocol                 = "tcp"
+  cidr_blocks              = [data.aws_vpc.main.cidr_block]
+  security_group_id        = aws_security_group.ecs_service.id
+  description              = "Allow traffic from VPC to container port ${var.container_port}"
+}
