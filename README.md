@@ -100,6 +100,27 @@ At least one of `cpu` or `memory` must be provided.
 | scale_in_cooldown  | number | Cool-down time for scaling in (seconds)     | yes      |
 | scale_out_cooldown | number | Cool-down time for scaling out (seconds)    | yes      |
 
+### ⚠️ Consideraciones sobre Escalado a 0 (min_capacity = 0)
+
+El módulo **técnicamente permite** escalar a 0 tareas (`min_capacity = 0`), pero hay consideraciones importantes:
+
+**Limitaciones cuando min_capacity = 0:**
+
+1. **Target Group sin targets**: Cuando el servicio escala a 0, el Target Group del ALB no tendrá targets saludables, causando errores **503 (Service Unavailable)** para todas las solicitudes entrantes.
+
+2. **Métricas no disponibles**: Las políticas de autoscaling basadas en CPU y memoria (`ECSServiceAverageCPUUtilization` y `ECSServiceAverageMemoryUtilization`) requieren que haya al menos una tarea ejecutándose para generar métricas. Cuando hay 0 tareas:
+   - No se generan métricas de CPU/memoria
+   - El autoscaling **no puede escalar automáticamente desde 0** basándose en estas métricas
+   - Será necesario escalar manualmente o usar escalado programado (scheduled scaling) para iniciar tareas
+
+3. **Cold start**: Cuando el servicio escala desde 0, habrá un retraso (cold start) antes de que las tareas estén listas para recibir tráfico.
+
+**Recomendaciones:**
+
+- **Producción con ALB**: Use `min_capacity = 1` para garantizar disponibilidad y permitir que el autoscaling funcione correctamente
+- **Desarrollo/Testing**: `min_capacity = 0` puede ser útil para ahorrar costos cuando no hay tráfico
+- **Si necesita escalar a 0**: Considere usar escalado programado (scheduled scaling) o métricas alternativas basadas en el ALB (como request count) para escalar desde 0
+
 ### Deployment Config
 
 | Name                    | Type   | Description                                           | Required |

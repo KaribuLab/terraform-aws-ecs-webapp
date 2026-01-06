@@ -102,7 +102,16 @@ variable "listener_rules" {
 }
 
 variable "autoscaling_config" {
-  description = "Auto scaling configuration"
+  description = <<-EOT
+    Auto scaling configuration.
+    
+    IMPORTANT: When min_capacity = 0:
+    - The service can scale to zero tasks, but this has implications:
+      * The ALB Target Group will have no healthy targets, causing 503 errors for incoming requests
+      * CPU/Memory metrics won't be available when there are 0 tasks, so autoscaling policies based on these metrics cannot automatically scale up from 0
+      * You may need to manually scale up or use scheduled scaling to handle traffic spikes
+    - Consider using min_capacity = 1 for production workloads with ALB to ensure availability
+  EOT
   type = object({
     min_capacity = number
     max_capacity = number
@@ -120,6 +129,14 @@ variable "autoscaling_config" {
   validation {
     condition     = var.autoscaling_config.memory != null || var.autoscaling_config.cpu != null
     error_message = "At least one of memory or cpu must be provided"
+  }
+  validation {
+    condition     = var.autoscaling_config.min_capacity >= 0
+    error_message = "min_capacity must be greater than or equal to 0"
+  }
+  validation {
+    condition     = var.autoscaling_config.max_capacity >= var.autoscaling_config.min_capacity
+    error_message = "max_capacity must be greater than or equal to min_capacity"
   }
 }
 
