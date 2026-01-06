@@ -75,14 +75,15 @@ Al menos uno de `path_patterns` o `host_headers` debe ser proporcionado.
 
 ### Autoscaling Config
 
-| Name         | Type   | Description                                                           | Required |
-| ------------ | ------ | --------------------------------------------------------------------- | -------- |
-| min_capacity | number | Minimum task capacity                                                 | yes      |
-| max_capacity | number | Maximum task capacity                                                 | yes      |
-| cpu          | object | [CPU autoscaling configuration](#cpu-autoscaling-configuration)       | no       |
-| memory       | object | [Memory autoscaling configuration](#memory-autoscaling-configuration) | no       |
+| Name             | Type   | Description                                                                 | Required |
+| ---------------- | ------ | --------------------------------------------------------------------------- | -------- |
+| min_capacity     | number | Minimum task capacity                                                      | yes      |
+| max_capacity     | number | Maximum task capacity                                                      | yes      |
+| cpu              | object | [CPU autoscaling configuration](#cpu-autoscaling-configuration)             | no       |
+| memory           | object | [Memory autoscaling configuration](#memory-autoscaling-configuration)       | no       |
+| alb_request_count| object | [ALB request count autoscaling configuration](#alb-request-count-configuration) | no       |
 
-At least one of `cpu` or `memory` must be provided.
+At least one of `cpu`, `memory`, or `alb_request_count` must be provided. When `min_capacity = 0`, `alb_request_count` is required to enable automatic scaling from 0.
 
 #### CPU Autoscaling Configuration
 
@@ -100,26 +101,39 @@ At least one of `cpu` or `memory` must be provided.
 | scale_in_cooldown  | number | Cool-down time for scaling in (seconds)     | yes      |
 | scale_out_cooldown | number | Cool-down time for scaling out (seconds)    | yes      |
 
+#### ALB Request Count Autoscaling Configuration
+
+| Name               | Type   | Description                                                                    | Required |
+| ------------------ | ------ | ------------------------------------------------------------------------------ | -------- |
+| target_value       | number | Target number of requests per target for scaling (e.g., 100 requests per task) | yes      |
+| scale_in_cooldown  | number | Cool-down time for scaling in (seconds)                                        | yes      |
+| scale_out_cooldown | number | Cool-down time for scaling out (seconds)                                       | yes      |
+
+This policy uses ALB metrics (`ALBRequestCountPerTarget`) which are available even when there are 0 tasks, enabling automatic scaling from 0. **Required when `min_capacity = 0`**.
+
 ### ⚠️ Consideraciones sobre Escalado a 0 (min_capacity = 0)
 
 El módulo **técnicamente permite** escalar a 0 tareas (`min_capacity = 0`), pero hay consideraciones importantes:
 
 **Limitaciones cuando min_capacity = 0:**
 
-1. **Target Group sin targets**: Cuando el servicio escala a 0, el Target Group del ALB no tendrá targets saludables, causando errores **503 (Service Unavailable)** para todas las solicitudes entrantes.
+1. **Target Group sin targets**: Cuando el servicio escala a 0, el Target Group del ALB no tendrá targets saludables, causando errores **503 (Service Unavailable)** para todas las solicitudes entrantes hasta que el servicio escale nuevamente.
 
 2. **Métricas no disponibles**: Las políticas de autoscaling basadas en CPU y memoria (`ECSServiceAverageCPUUtilization` y `ECSServiceAverageMemoryUtilization`) requieren que haya al menos una tarea ejecutándose para generar métricas. Cuando hay 0 tareas:
    - No se generan métricas de CPU/memoria
-   - El autoscaling **no puede escalar automáticamente desde 0** basándose en estas métricas
-   - Será necesario escalar manualmente o usar escalado programado (scheduled scaling) para iniciar tareas
+   - Las políticas de CPU/Memoria no pueden escalar desde 0 automáticamente
 
 3. **Cold start**: Cuando el servicio escala desde 0, habrá un retraso (cold start) antes de que las tareas estén listas para recibir tráfico.
 
+**Solución: Política basada en ALB Request Count**
+
+Para habilitar el escalado automático desde 0, **debe proporcionar `alb_request_count`** cuando `min_capacity = 0`. Esta política usa métricas del ALB (`ALBRequestCountPerTarget`) que están disponibles incluso sin tareas ejecutándose, permitiendo que el servicio escale automáticamente cuando lleguen solicitudes.
+
 **Recomendaciones:**
 
-- **Producción con ALB**: Use `min_capacity = 1` para garantizar disponibilidad y permitir que el autoscaling funcione correctamente
-- **Desarrollo/Testing**: `min_capacity = 0` puede ser útil para ahorrar costos cuando no hay tráfico
-- **Si necesita escalar a 0**: Considere usar escalado programado (scheduled scaling) o métricas alternativas basadas en el ALB (como request count) para escalar desde 0
+- **Producción con ALB**: Use `min_capacity = 1` para garantizar disponibilidad continua, o use `min_capacity = 0` con `alb_request_count` configurado
+- **Desarrollo/Testing**: `min_capacity = 0` con `alb_request_count` es útil para ahorrar costos cuando no hay tráfico
+- **Políticas combinadas**: Puede usar `alb_request_count` junto con `cpu` y/o `memory`. AWS Application Auto Scaling evaluará todas las políticas y usará la que requiera más capacidad
 
 ### Deployment Config
 
@@ -253,6 +267,35 @@ module "ecs_webapp" {
       name = "api"
       type = "A"
       ttl  = 300
+    }
+  }
+
+  // ... otras configuraciones ...
+}
+```
+
+#### Configuración con escalado a 0 usando ALB Request Count
+```hcl
+module "ecs_webapp" {
+  source = "github.com/your-username/terraform-aws-ecs-webapp"
+
+  // ... configuración básica ...
+
+  autoscaling_config = {
+    min_capacity       = 0  # Permite escalar a 0 tareas
+    max_capacity       = 10
+    # ALB request count es requerido cuando min_capacity = 0
+    alb_request_count = {
+      target_value       = 100  # Escala cuando hay más de 100 requests por target
+      scale_in_cooldown  = 300  # Espera 5 minutos antes de reducir
+      scale_out_cooldown = 60  # Espera 1 minuto antes de aumentar
+    }
+    # Opcional: también puede incluir políticas de CPU/Memoria
+    # Estas funcionarán cuando haya tareas ejecutándose
+    cpu = {
+      target_value       = 70
+      scale_in_cooldown  = 300
+      scale_out_cooldown = 60
     }
   }
 

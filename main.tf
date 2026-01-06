@@ -249,9 +249,38 @@ resource "aws_appautoscaling_policy" "memory" {
   }
 }
 
+resource "aws_appautoscaling_policy" "alb_request_count" {
+  count              = var.autoscaling_config.alb_request_count != null ? 1 : 0
+  name               = "alb-request-count-scaling-policy-${var.service_name}"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.ecs.resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ALBRequestCountPerTarget"
+      resource_label          = "app/${data.aws_lb.webapp.name}/${split("/", split(":", data.aws_lb.webapp.arn)[5])[3]}/targetgroup/${aws_lb_target_group.webapp.name}/${split("/", split(":", aws_lb_target_group.webapp.arn)[5])[2]}"
+    }
+    target_value       = var.autoscaling_config.alb_request_count.target_value
+    scale_in_cooldown  = var.autoscaling_config.alb_request_count.scale_in_cooldown
+    scale_out_cooldown = var.autoscaling_config.alb_request_count.scale_out_cooldown
+  }
+}
+
 
 # Get current AWS region
 data "aws_region" "current" {}
+
+# Get ALB listener to extract ALB information
+data "aws_lb_listener" "webapp" {
+  arn = var.alb_listener_arn
+}
+
+# Get ALB information
+data "aws_lb" "webapp" {
+  arn = data.aws_lb_listener.webapp.load_balancer_arn
+}
 
 # Security Group for ECS Service
 resource "aws_security_group" "ecs_service" {
