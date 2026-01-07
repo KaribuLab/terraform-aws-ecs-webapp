@@ -34,7 +34,8 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 	t.Logf("   Fixtures Directory: %s", fixturesDir)
 
 	terraformOptions := &terraform.Options{
-		TerraformDir: fixturesDir,
+		TerraformDir:    fixturesDir,
+		TerraformBinary: "terraform",
 		Vars: map[string]interface{}{
 			"test_name":  testName,
 			"aws_region": awsRegion,
@@ -98,7 +99,8 @@ func setupModuleOptions(t *testing.T, moduleDir string, outputs *InfrastructureO
 	}
 
 	return &terraform.Options{
-		TerraformDir: moduleDir,
+		TerraformDir:    moduleDir,
+		TerraformBinary: "terraform",
 		Vars: map[string]interface{}{
 			"cluster_name":              outputs.ClusterName,
 			"service_name":              fmt.Sprintf("%s-service", testName),
