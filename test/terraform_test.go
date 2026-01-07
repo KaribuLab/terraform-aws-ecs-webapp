@@ -15,13 +15,18 @@ func TestTerraformModule(t *testing.T) {
 
 	// Setup infrastructure fixtures
 	infraOptions, infraOutputs := setupInfrastructure(t, testName)
-	defer teardownInfrastructure(t, infraOptions)
+	// Use t.Cleanup instead of defer for more robust cleanup
+	t.Cleanup(func() {
+		teardownInfrastructure(t, infraOptions)
+	})
 
 	// Setup module options
 	moduleOptions := setupModuleOptions(t, "..", infraOutputs, testName)
 
-	// Cleanup module resources
-	defer terraform.Destroy(t, moduleOptions)
+	// Cleanup module resources - use t.Cleanup for guaranteed execution
+	t.Cleanup(func() {
+		cleanupModule(t, moduleOptions)
+	})
 
 	// Apply module
 	t.Logf("🚀 Applying Terraform module...")

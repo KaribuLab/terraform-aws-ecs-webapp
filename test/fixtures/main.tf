@@ -35,7 +35,9 @@ resource "aws_vpc" "main" {
   enable_dns_support   = true
 
   tags = {
-    Name = "${var.test_name}-vpc"
+    Name      = "${var.test_name}-vpc"
+    ManagedBy = "terratest"
+    TestName  = var.test_name
   }
 }
 
@@ -44,7 +46,9 @@ resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "${var.test_name}-igw"
+    Name      = "${var.test_name}-igw"
+    ManagedBy = "terratest"
+    TestName  = var.test_name
   }
 }
 
@@ -58,8 +62,10 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "${var.test_name}-public-subnet-${count.index + 1}"
-    Type = "public"
+    Name      = "${var.test_name}-public-subnet-${count.index + 1}"
+    Type      = "public"
+    ManagedBy = "terratest"
+    TestName  = var.test_name
   }
 }
 
@@ -71,8 +77,10 @@ resource "aws_subnet" "private" {
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   tags = {
-    Name = "${var.test_name}-private-subnet-${count.index + 1}"
-    Type = "private"
+    Name      = "${var.test_name}-private-subnet-${count.index + 1}"
+    Type      = "private"
+    ManagedBy = "terratest"
+    TestName  = var.test_name
   }
 }
 
@@ -82,7 +90,9 @@ resource "aws_eip" "nat" {
   domain = "vpc"
 
   tags = {
-    Name = "${var.test_name}-nat-eip-${count.index + 1}"
+    Name      = "${var.test_name}-nat-eip-${count.index + 1}"
+    ManagedBy = "terratest"
+    TestName  = var.test_name
   }
 
   depends_on = [aws_internet_gateway.main]
@@ -95,7 +105,9 @@ resource "aws_nat_gateway" "main" {
   subnet_id     = aws_subnet.public[count.index].id
 
   tags = {
-    Name = "${var.test_name}-nat-${count.index + 1}"
+    Name      = "${var.test_name}-nat-${count.index + 1}"
+    ManagedBy = "terratest"
+    TestName  = var.test_name
   }
 
   depends_on = [aws_internet_gateway.main]
@@ -111,7 +123,9 @@ resource "aws_route_table" "public" {
   }
 
   tags = {
-    Name = "${var.test_name}-public-rt"
+    Name      = "${var.test_name}-public-rt"
+    ManagedBy = "terratest"
+    TestName  = var.test_name
   }
 }
 
@@ -133,7 +147,9 @@ resource "aws_route_table" "private" {
   }
 
   tags = {
-    Name = "${var.test_name}-private-rt-${count.index + 1}"
+    Name      = "${var.test_name}-private-rt-${count.index + 1}"
+    ManagedBy = "terratest"
+    TestName  = var.test_name
   }
 }
 

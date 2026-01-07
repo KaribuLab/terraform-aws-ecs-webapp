@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	terratestaws "github.com/gruntwork-io/terratest/modules/aws"
 	"github.com/gruntwork-io/terratest/modules/terraform"
 )
 
@@ -35,9 +36,52 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 	t.Logf("   AWS Region: %s", awsRegion)
 	t.Logf("   Fixtures Directory: %s", fixturesDir)
 
+	// Get AWS account ID for bucket name
+	awsAccountID := getAWSAccountID(t, awsRegion)
+	bucketName := fmt.Sprintf("terraform-ecs-webapp-test-%s-%s", awsRegion, awsAccountID)
+	dynamoTableName := "terraform-ecs-webapp-test-locks"
+
+	t.Logf("   State Bucket: %s", bucketName)
+	t.Logf("   Lock Table: %s", dynamoTableName)
+
+	// Step 1: Bootstrap S3 bucket and DynamoDB table (without backend)
+	// Create bootstrap resources first, then migrate state to backend
+	t.Logf("🔧 Bootstrapping backend resources (S3 bucket and DynamoDB table)...")
+	bootstrapOptions := &terraform.Options{
+		TerraformDir:    fixturesDir,
+		TerraformBinary: "terraform",
+		// No BackendConfig means Terraform will use local state
+		Vars: map[string]interface{}{
+			"test_name":  testName,
+			"aws_region": awsRegion,
+		},
+		NoColor: true,
+		Targets: []string{
+			"aws_s3_bucket.terraform_state",
+			"aws_s3_bucket_versioning.terraform_state",
+			"aws_s3_bucket_server_side_encryption_configuration.terraform_state",
+			"aws_s3_bucket_public_access_block.terraform_state",
+			"aws_dynamodb_table.terraform_locks",
+		},
+	}
+
+	// Initialize without backend and apply bootstrap resources
+	// If resources already exist, Terraform will update them
+	terraform.Init(t, bootstrapOptions)
+	terraform.Apply(t, bootstrapOptions)
+	t.Logf("✅ Backend resources ready")
+
+	// Step 2: Now initialize with backend and apply the rest
 	terraformOptions := &terraform.Options{
 		TerraformDir:    fixturesDir,
 		TerraformBinary: "terraform",
+		BackendConfig: map[string]interface{}{
+			"bucket":         bucketName,
+			"key":            "fixtures/terraform.tfstate",
+			"region":         awsRegion,
+			"dynamodb_table": dynamoTableName,
+			"encrypt":        true,
+		},
 		Vars: map[string]interface{}{
 			"test_name":  testName,
 			"aws_region": awsRegion,
@@ -45,8 +89,9 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 		NoColor: true,
 	}
 
-	t.Logf("📦 Initializing and applying infrastructure fixtures...")
-	terraform.InitAndApply(t, terraformOptions)
+	t.Logf("📦 Initializing with backend and applying infrastructure fixtures...")
+	terraform.Init(t, terraformOptions)
+	terraform.Apply(t, terraformOptions)
 	t.Logf("✅ Infrastructure fixtures applied successfully")
 
 	t.Logf("📤 Reading infrastructure outputs...")
@@ -79,8 +124,33 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 // teardownInfrastructure destroys the infrastructure fixtures
 func teardownInfrastructure(t *testing.T, terraformOptions *terraform.Options) {
 	t.Logf("🧹 Tearing down infrastructure fixtures...")
-	terraform.Destroy(t, terraformOptions)
-	t.Logf("✅ Infrastructure fixtures destroyed")
+	
+	// Use DestroyE to handle errors gracefully
+	// This allows cleanup to continue even if there are issues
+	_, err := terraform.DestroyE(t, terraformOptions)
+	if err != nil {
+		t.Logf("⚠️  Warning: Error during infrastructure teardown: %v", err)
+		t.Logf("   Resources may need manual cleanup")
+		if bucket, ok := terraformOptions.BackendConfig["bucket"].(string); ok {
+			t.Logf("   State bucket: %s", bucket)
+		}
+	} else {
+		t.Logf("✅ Infrastructure fixtures destroyed")
+	}
+}
+
+// cleanupModule destroys the module resources
+func cleanupModule(t *testing.T, terraformOptions *terraform.Options) {
+	t.Logf("🧹 Tearing down module resources...")
+	
+	// Use DestroyE to handle errors gracefully
+	_, err := terraform.DestroyE(t, terraformOptions)
+	if err != nil {
+		t.Logf("⚠️  Warning: Error during module teardown: %v", err)
+		t.Logf("   Resources may need manual cleanup")
+	} else {
+		t.Logf("✅ Module resources destroyed")
+	}
 }
 
 // setupModuleOptions configures Terraform options for the module
@@ -198,4 +268,11 @@ func sanitizeName(name string) string {
 		}
 	}
 	return result.String()
+}
+
+// getAWSAccountID gets the AWS account ID from the current AWS credentials
+func getAWSAccountID(t *testing.T, region string) string {
+	// Use Terratest AWS module to get caller identity
+	accountID := terratestaws.GetAccountId(t)
+	return accountID
 }

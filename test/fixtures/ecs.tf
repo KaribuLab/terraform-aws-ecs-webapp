@@ -3,7 +3,9 @@ resource "aws_ecs_cluster" "main" {
   name = "${var.test_name}-cluster"
 
   tags = {
-    Name = "${var.test_name}-cluster"
+    Name      = "${var.test_name}-cluster"
+    ManagedBy = "terratest"
+    TestName  = var.test_name
   }
 }
 
@@ -13,7 +15,9 @@ resource "aws_cloudwatch_log_group" "main" {
   retention_in_days = 7
 
   tags = {
-    Name = "${var.test_name}-log-group"
+    Name      = "${var.test_name}-log-group"
+    ManagedBy = "terratest"
+    TestName  = var.test_name
   }
 }
 
@@ -25,7 +29,9 @@ resource "aws_ssm_parameter" "test_secret" {
   value       = "test-secret-value"
 
   tags = {
-    Name = "${var.test_name}-test-secret"
+    Name      = "${var.test_name}-test-secret"
+    ManagedBy = "terratest"
+    TestName  = var.test_name
   }
 }
 
@@ -36,6 +42,8 @@ resource "aws_ssm_parameter" "api_key" {
   value       = "test-api-key-12345"
 
   tags = {
-    Name = "${var.test_name}-api-key"
+    Name      = "${var.test_name}-api-key"
+    ManagedBy = "terratest"
+    TestName  = var.test_name
   }
 }

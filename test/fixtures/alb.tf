@@ -19,7 +19,9 @@ resource "aws_security_group" "alb" {
   }
 
   tags = {
-    Name = "${var.test_name}-alb-sg"
+    Name      = "${var.test_name}-alb-sg"
+    ManagedBy = "terratest"
+    TestName  = var.test_name
   }
 }
 
@@ -34,7 +36,9 @@ resource "aws_lb" "main" {
   enable_deletion_protection = false
 
   tags = {
-    Name = "${var.test_name}-alb"
+    Name      = "${var.test_name}-alb"
+    ManagedBy = "terratest"
+    TestName  = var.test_name
   }
 }
 
@@ -57,7 +61,9 @@ resource "aws_lb_target_group" "default" {
   }
 
   tags = {
-    Name = "${var.test_name}-default-tg"
+    Name      = "${var.test_name}-default-tg"
+    ManagedBy = "terratest"
+    TestName  = var.test_name
   }
 }
 
