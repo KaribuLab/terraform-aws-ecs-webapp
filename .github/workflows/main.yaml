@@ -6,7 +6,43 @@ on:
       - "main"
 
 jobs:
+  test:
+    name: Terratest
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    env:
+      AWS_DEFAULT_REGION: us-west-2
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_INFRA_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_DEFAULT_REGION }}
+
+      - name: Install dependencies
+        run: |
+          go mod download
+
+      - name: Run Terratest
+        run: |
+          cd test
+          go test -v -timeout 60m
+        env:
+          AWS_DEFAULT_REGION: ${{ env.AWS_DEFAULT_REGION }}
+
   check_tag:
+    needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     outputs:
@@ -39,16 +75,19 @@ jobs:
         with:
           name: kli
           path: kli
+
   create_tag:
-    needs: check_tag
+    needs: [test, check_tag]
     runs-on: ubuntu-latest
-    if: needs.check_tag.outputs.tag_exists == 'false'
+    if: needs.check_tag.outputs.tag_exists == 'false' && github.ref == 'refs/heads/main'
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ssh-key: ${{ secrets.KARIBU_SSH_KEY }}
       - name: Set up Git user
         run: |
           git config --global user.name "github-actions[bot]"

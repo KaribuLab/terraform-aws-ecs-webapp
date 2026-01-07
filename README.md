@@ -314,67 +314,140 @@ El security group permite tráfico únicamente desde el ALB al puerto del conten
 alb_security_group_id = "sg-alb123456"  # ID del security group del ALB
 ```
 
-## Local Testing
+## Testing
 
-The module includes scripts to facilitate local testing:
+El módulo incluye pruebas automatizadas usando [Terratest](https://terratest.gruntwork.io/) que verifican que todos los recursos se crean correctamente.
 
-### Prerequisites
+### Ejecutar Pruebas con Terratest
 
-- AWS CLI configured with appropriate credentials
-- Bash shell environment
-- Terraform installed locally
+Las pruebas crean automáticamente toda la infraestructura necesaria (VPC, ALB, ECS cluster, etc.), aplican el módulo, verifican los recursos y limpian todo al finalizar.
 
-### Setting up the test environment
+#### Prerrequisitos
 
-1. (Optional) Create a `.env` file to customize your test environment:
+- Go 1.21 o superior
+- Terraform >= 1.0
+- AWS CLI configurado con credenciales apropiadas
+- Permisos AWS para crear:
+  - VPC, Subnets, Internet Gateway, NAT Gateway
+  - Application Load Balancer
+  - ECS Cluster y Services
+  - IAM Roles y Policies
+  - Security Groups
+  - CloudWatch Log Groups
+  - Application Auto Scaling resources
 
+#### Configuración de Credenciales AWS
+
+Asegúrate de tener credenciales AWS configuradas. Puedes usar cualquiera de estos métodos:
+
+**Opción 1: Variables de entorno**
 ```bash
-# Copy from the .env.example file
-cp .env.example .env
+export AWS_ACCESS_KEY_ID="tu-access-key"
+export AWS_SECRET_ACCESS_KEY="tu-secret-key"
+export AWS_DEFAULT_REGION="us-east-1"
 ```
 
-2. Customize the `.env` file with your preferred settings. You can define:
-   - AWS region
-   - Docker image repository and image tag for testing
-   - Container port
-   - Target group port
-   - VPC and subnet IDs (optional)
-
+**Opción 2: Archivo de credenciales (~/.aws/credentials)**
 ```bash
-# Example .env configuration
-AWS_REGION=us-east-1
-DOCKER_IMAGE=123456789012.dkr.ecr.us-east-1.amazonaws.com/my-repository
-IMAGE_TAG=latest
-CONTAINER_PORT=80
-TARGET_GROUP_PORT=80
+aws configure
 ```
 
-3. Run the setup script to create all necessary AWS resources:
-
+**Opción 3: Perfil de AWS**
 ```bash
-./setup-test-infra.sh
+export AWS_PROFILE="tu-perfil"
 ```
 
-This script will:
-- Create a VPC with public and private subnets if needed
-- Set up an Application Load Balancer
-- Create security groups
-- Create an ECS cluster
-- Create a CloudWatch Log Group for the ECS service
-- Generate a `terraform.tfvars` file with all required values
-- Generate a cleanup script to remove all resources later
+#### Instalar Dependencias
 
-### Running tests
-
-Once the script completes, you can run:
+Desde la raíz del proyecto:
 
 ```bash
-terraform init -reconfigure
-terraform plan
-terraform apply
+go mod download
 ```
 
-The `-reconfigure` flag is necessary because the backend configuration may change between test runs when the script recreates S3 buckets and DynamoDB tables.
+#### Ejecutar Todas las Pruebas
+
+```bash
+cd test
+go test -v -timeout 60m
+```
+
+#### Ejecutar Pruebas Específicas
+
+```bash
+cd test
+# Ejecutar solo pruebas del servicio ECS
+go test -v -timeout 60m -run TestTerraformModule/ECS_Service
+
+# Ejecutar solo pruebas de autoscaling
+go test -v -timeout 60m -run TestTerraformModule/Autoscaling
+```
+
+#### Configuración Personalizada
+
+Puedes personalizar la configuración con variables de entorno:
+
+```bash
+export AWS_DEFAULT_REGION="us-west-2"  # Región AWS
+export ECR_REPOSITORY="nginx"          # Imagen Docker (default: nginx)
+export IMAGE_TAG="latest"              # Tag de imagen (default: latest)
+export CONTAINER_PORT="80"             # Puerto del contenedor (default: 80)
+
+cd test
+go test -v -timeout 60m
+```
+
+#### Qué Esperar
+
+Las pruebas:
+1. **Crean infraestructura base** (VPC, ALB, ECS cluster) - ~5-10 minutos
+2. **Aplican el módulo Terraform** - ~2-5 minutos
+3. **Ejecutan verificaciones** - ~1-2 minutos
+4. **Destruyen todo automáticamente** - ~5-10 minutos
+
+**Tiempo total estimado**: 15-30 minutos
+
+#### Cobertura de Pruebas
+
+Las pruebas verifican:
+- ✅ Creación y configuración del servicio ECS
+- ✅ Task Definition con configuración correcta de contenedores
+- ✅ Configuración del Target Group y health checks
+- ✅ Políticas de Auto Scaling (CPU-based)
+- ✅ IAM Execution Role con políticas correctas
+- ✅ Security Groups con reglas de ingreso/egreso apropiadas
+- ✅ Todos los outputs del módulo son válidos
+
+#### Consideraciones de Costos
+
+⚠️ **Advertencia**: Las pruebas crean recursos reales en AWS y generarán costos:
+- VPC con NAT Gateway (~$0.045/hora)
+- Application Load Balancer (~$0.0225/hora)
+- ECS Fargate tasks (~$0.04/vCPU-hora + ~$0.004/GB-hora)
+- Costos de transferencia de datos
+
+**Costo estimado por ejecución de pruebas**: $0.10 - $0.50
+
+#### Troubleshooting
+
+**Error: "AWS credentials not found"**
+```bash
+# Verifica tus credenciales
+aws sts get-caller-identity
+```
+
+**Error: "timeout"**
+```bash
+# Aumenta el timeout
+go test -v -timeout 90m
+```
+
+**Error: "Resource Already Exists"**
+- Asegúrate de que ejecuciones anteriores completaron la limpieza
+- Verifica recursos huérfanos en AWS Console
+- Los nombres de recursos incluyen timestamps aleatorios para evitar conflictos
+
+Para más detalles, consulta [test/README.md](test/README.md).
 
 ### Container Port Configuration
 

@@ -35,3 +35,10 @@ terraform.rc
 cleanup-test-infra.sh
 test.tfvars
 *.old
+
+# Terratest files
+test/.terraform/
+test/terraform.tfstate*
+test/fixtures/.terraform/
+test/fixtures/terraform.tfstate*
+test/fixtures/.terraform.lock.hcl
