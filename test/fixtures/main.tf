@@ -18,11 +18,6 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
-variable "test_name" {
-  description = "Name prefix for test resources"
-  type        = string
-}
-
 # Get available AZs
 data "aws_availability_zones" "available" {
   state = "available"
@@ -35,9 +30,9 @@ resource "aws_vpc" "main" {
   enable_dns_support   = true
 
   tags = {
-    Name      = "${var.test_name}-vpc"
+    Name      = "terratest-fixtures-vpc"
     ManagedBy = "terratest"
-    TestName  = var.test_name
+    TestName  = "terratest-fixtures"
   }
 }
 
@@ -46,9 +41,9 @@ resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name      = "${var.test_name}-igw"
+    Name      = "terratest-fixtures-igw"
     ManagedBy = "terratest"
-    TestName  = var.test_name
+    TestName  = "terratest-fixtures"
   }
 }
 
@@ -62,10 +57,10 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name      = "${var.test_name}-public-subnet-${count.index + 1}"
+    Name      = "terratest-fixtures-public-subnet-${count.index + 1}"
     Type      = "public"
     ManagedBy = "terratest"
-    TestName  = var.test_name
+    TestName  = "terratest-fixtures"
   }
 }
 
@@ -77,10 +72,10 @@ resource "aws_subnet" "private" {
   availability_zone = data.aws_availability_zones.available.names[count.index]
 
   tags = {
-    Name      = "${var.test_name}-private-subnet-${count.index + 1}"
+    Name      = "terratest-fixtures-private-subnet-${count.index + 1}"
     Type      = "private"
     ManagedBy = "terratest"
-    TestName  = var.test_name
+    TestName  = "terratest-fixtures"
   }
 }
 
@@ -90,9 +85,9 @@ resource "aws_eip" "nat" {
   domain = "vpc"
 
   tags = {
-    Name      = "${var.test_name}-nat-eip-${count.index + 1}"
+    Name      = "terratest-fixtures-nat-eip-${count.index + 1}"
     ManagedBy = "terratest"
-    TestName  = var.test_name
+    TestName  = "terratest-fixtures"
   }
 
   depends_on = [aws_internet_gateway.main]
@@ -105,9 +100,9 @@ resource "aws_nat_gateway" "main" {
   subnet_id     = aws_subnet.public[count.index].id
 
   tags = {
-    Name      = "${var.test_name}-nat-${count.index + 1}"
+    Name      = "terratest-fixtures-nat-${count.index + 1}"
     ManagedBy = "terratest"
-    TestName  = var.test_name
+    TestName  = "terratest-fixtures"
   }
 
   depends_on = [aws_internet_gateway.main]
@@ -123,9 +118,9 @@ resource "aws_route_table" "public" {
   }
 
   tags = {
-    Name      = "${var.test_name}-public-rt"
+    Name      = "terratest-fixtures-public-rt"
     ManagedBy = "terratest"
-    TestName  = var.test_name
+    TestName  = "terratest-fixtures"
   }
 }
 
@@ -147,9 +142,9 @@ resource "aws_route_table" "private" {
   }
 
   tags = {
-    Name      = "${var.test_name}-private-rt-${count.index + 1}"
+    Name      = "terratest-fixtures-private-rt-${count.index + 1}"
     ManagedBy = "terratest"
-    TestName  = var.test_name
+    TestName  = "terratest-fixtures"
   }
 }
 

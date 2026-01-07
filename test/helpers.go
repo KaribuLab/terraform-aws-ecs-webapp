@@ -55,7 +55,6 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 		TerraformBinary: "terraform",
 		// No BackendConfig means Terraform will use local state
 		Vars: map[string]interface{}{
-			"test_name":  testName,
 			"aws_region": awsRegion,
 		},
 		NoColor: true,
@@ -80,7 +79,6 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 		importArgs := []string{
 			"import",
 			"-input=false",
-			"-var", fmt.Sprintf("test_name=%s", testName),
 			"-var", fmt.Sprintf("aws_region=%s", awsRegion),
 			"aws_s3_bucket.terraform_state",
 			bucketName,
@@ -102,7 +100,6 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 		importArgs := []string{
 			"import",
 			"-input=false",
-			"-var", fmt.Sprintf("test_name=%s", testName),
 			"-var", fmt.Sprintf("aws_region=%s", awsRegion),
 			"aws_dynamodb_table.terraform_locks",
 			dynamoTableName,
@@ -150,7 +147,6 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 			"encrypt":        true,
 		},
 		Vars: map[string]interface{}{
-			"test_name":  testName,
 			"aws_region": awsRegion,
 		},
 		NoColor: true,
@@ -196,10 +192,16 @@ func teardownInfrastructure(t *testing.T, terraformOptions *terraform.Options) {
 	// This allows cleanup to continue even if there are issues
 	_, err := terraform.DestroyE(t, terraformOptions)
 	if err != nil {
-		t.Logf("⚠️  Warning: Error during infrastructure teardown: %v", err)
-		t.Logf("   Resources may need manual cleanup")
-		if bucket, ok := terraformOptions.BackendConfig["bucket"].(string); ok {
-			t.Logf("   State bucket: %s", bucket)
+		// If the error is because resources don't exist, treat it as success
+		if isResourceNotFoundError(err) {
+			t.Logf("✅ Resources already destroyed or not found (this is expected)")
+			t.Logf("   Error details: %v", err)
+		} else {
+			t.Logf("⚠️  Warning: Error during infrastructure teardown: %v", err)
+			t.Logf("   Resources may need manual cleanup")
+			if bucket, ok := terraformOptions.BackendConfig["bucket"].(string); ok {
+				t.Logf("   State bucket: %s", bucket)
+			}
 		}
 	} else {
 		t.Logf("✅ Infrastructure fixtures destroyed")
@@ -213,8 +215,14 @@ func cleanupModule(t *testing.T, terraformOptions *terraform.Options) {
 	// Use DestroyE to handle errors gracefully
 	_, err := terraform.DestroyE(t, terraformOptions)
 	if err != nil {
-		t.Logf("⚠️  Warning: Error during module teardown: %v", err)
-		t.Logf("   Resources may need manual cleanup")
+		// If the error is because resources don't exist, treat it as success
+		if isResourceNotFoundError(err) {
+			t.Logf("✅ Resources already destroyed or not found (this is expected)")
+			t.Logf("   Error details: %v", err)
+		} else {
+			t.Logf("⚠️  Warning: Error during module teardown: %v", err)
+			t.Logf("   Resources may need manual cleanup")
+		}
 	} else {
 		t.Logf("✅ Module resources destroyed")
 	}
@@ -366,4 +374,30 @@ func checkS3BucketExists(t *testing.T, region, bucketName string) bool {
 	})
 
 	return err == nil
+}
+
+// isResourceNotFoundError checks if an error indicates that a resource was not found
+// This is useful for treating "resource not found" errors as success during destroy operations
+func isResourceNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := strings.ToLower(err.Error())
+	notFoundPatterns := []string{
+		"does not exist",
+		"not found",
+		"resourcenotfoundexception",
+		"nosuchentity",
+		"invalidparametervalue: resource",
+		"does not exist in state",
+		"no such",
+		"cannot find",
+		"not exist",
+	}
+	for _, pattern := range notFoundPatterns {
+		if strings.Contains(errStr, pattern) {
+			return true
+		}
+	}
+	return false
 }

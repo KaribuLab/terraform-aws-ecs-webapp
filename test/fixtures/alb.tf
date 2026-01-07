@@ -1,6 +1,6 @@
 # Security Group for ALB
 resource "aws_security_group" "alb" {
-  name        = "${var.test_name}-alb-sg"
+  name        = "terratest-fixtures-alb-sg"
   description = "Security group for test ALB"
   vpc_id      = aws_vpc.main.id
 
@@ -19,15 +19,15 @@ resource "aws_security_group" "alb" {
   }
 
   tags = {
-    Name      = "${var.test_name}-alb-sg"
+    Name      = "terratest-fixtures-alb-sg"
     ManagedBy = "terratest"
-    TestName  = var.test_name
+    TestName  = "terratest-fixtures"
   }
 }
 
 # Application Load Balancer
 resource "aws_lb" "main" {
-  name               = "${var.test_name}-alb"
+  name               = "terratest-fixtures-alb"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
@@ -36,15 +36,15 @@ resource "aws_lb" "main" {
   enable_deletion_protection = false
 
   tags = {
-    Name      = "${var.test_name}-alb"
+    Name      = "terratest-fixtures-alb"
     ManagedBy = "terratest"
-    TestName  = var.test_name
+    TestName  = "terratest-fixtures"
   }
 }
 
 # Default Target Group (required for listener)
 resource "aws_lb_target_group" "default" {
-  name     = "${var.test_name}-default-tg"
+  name     = "terratest-fixtures-default-tg"
   port     = 80
   protocol = "HTTP"
   vpc_id   = aws_vpc.main.id
@@ -61,9 +61,9 @@ resource "aws_lb_target_group" "default" {
   }
 
   tags = {
-    Name      = "${var.test_name}-default-tg"
+    Name      = "terratest-fixtures-default-tg"
     ManagedBy = "terratest"
-    TestName  = var.test_name
+    TestName  = "terratest-fixtures"
   }
 }
 
