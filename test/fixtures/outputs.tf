@@ -37,3 +37,13 @@ output "aws_region" {
   description = "AWS region"
   value       = var.aws_region
 }
+
+output "test_secret_arn" {
+  description = "ARN of the TEST_SECRET SSM parameter"
+  value       = aws_ssm_parameter.test_secret.arn
+}
+
+output "api_key_arn" {
+  description = "ARN of the API_KEY SSM parameter"
+  value       = aws_ssm_parameter.api_key.arn
+}

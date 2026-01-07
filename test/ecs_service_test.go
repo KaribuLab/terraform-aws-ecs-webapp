@@ -137,6 +137,46 @@ func testECSService(t *testing.T, moduleOptions *terraform.Options, infraOutputs
 	require.Equal(t, int64(80), *containerDef.PortMappings[0].ContainerPort)
 	require.Equal(t, "tcp", *containerDef.PortMappings[0].Protocol)
 
+	// Verify secret variables from SSM Parameter Store
+	t.Logf("🔐 Verifying secret variables from SSM Parameter Store...")
+	t.Logf("   Secrets count: %d (expected: 2)", len(containerDef.Secrets))
+	require.Len(t, containerDef.Secrets, 2, "Container should have 2 secrets configured")
+
+	// Expected secrets with their SSM Parameter Store ARNs
+	expectedSecrets := map[string]string{
+		"TEST_SECRET": infraOutputs.TestSecretARN,
+		"API_KEY":     infraOutputs.APIKeyARN,
+	}
+
+	// Verify each secret is present and uses the correct SSM ARN
+	foundSecrets := make(map[string]bool)
+	for _, secret := range containerDef.Secrets {
+		if secret.Name != nil {
+			secretName := *secret.Name
+			t.Logf("   Secret Name: %s", secretName)
+
+			// Verify ValueFrom is set (required for SSM Parameter Store)
+			require.NotNil(t, secret.ValueFrom, "Secret %s should have ValueFrom set", secretName)
+			if secret.ValueFrom != nil {
+				valueFrom := *secret.ValueFrom
+				t.Logf("   Secret %s: ValueFrom = %s", secretName, valueFrom)
+
+				// Verify the ARN matches the expected SSM parameter ARN
+				if expectedARN, exists := expectedSecrets[secretName]; exists {
+					// The ValueFrom should be the ARN of the SSM parameter
+					require.Equal(t, expectedARN, valueFrom, "Secret %s should reference SSM parameter ARN %s", secretName, expectedARN)
+					foundSecrets[secretName] = true
+					t.Logf("   ✅ Secret %s correctly references SSM Parameter Store", secretName)
+				}
+			}
+		}
+	}
+
+	// Verify all expected secrets were found
+	for secretName := range expectedSecrets {
+		require.True(t, foundSecrets[secretName], "Secret %s should be present in container definition", secretName)
+	}
+
 	// Verify log configuration
 	t.Logf("📝 Verifying log configuration...")
 	if containerDef.LogConfiguration == nil {

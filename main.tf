@@ -19,6 +19,7 @@ resource "aws_ecs_task_definition" "webapp" {
         }
       ],
       environment = var.environment_variables,
+      secrets = var.secret_variables,
       logConfiguration = {
         logDriver = "awslogs",
         options = {

@@ -19,6 +19,7 @@ Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con ba
 | alb_security_group_id             | string       | ID del security group del Application Load Balancer                      | yes      |
 | service_discovery                 | object       | Service Discovery configuration for the ECS service                      | no       |
 | environment_variables             | list(object) | [Environment variables](#environment-variables) to pass to the container | no       |
+| secret_variables                  | list(object) | [Secret variables](#secret-variables) to pass to the container           | no       |
 | health_check                      | object       | [Health check configuration](#health-check)                              | yes      |
 | listener_rules                    | list(object) | [List of listener rules](#listener-rules)                                | no       |
 | autoscaling_config                | object       | [Auto scaling configuration](#autoscaling-config)                        | yes      |
@@ -36,6 +37,15 @@ Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con ba
 | ----- | ------ | --------------------------------- | -------- |
 | name  | string | Name of the environment variable  | yes      |
 | value | string | Value of the environment variable | yes      |
+
+### Secret Variables
+
+| Name      | Type   | Description                                                                 | Required |
+| --------- | ------ | --------------------------------------------------------------------------- | -------- |
+| name      | string | Name of the secret variable (environment variable name in the container)     | yes      |
+| valueFrom | string | ARN of the secret in AWS Secrets Manager or SSM Parameter Store             | yes      |
+
+**Note**: Secret variables must reference secrets stored in AWS Secrets Manager or Systems Manager Parameter Store using their ARNs. The `valueFrom` field should contain the full ARN of the secret (e.g., `arn:aws:ssm:region:account-id:parameter/parameter-name`).
 
 ### Service Discovery Configuration
 

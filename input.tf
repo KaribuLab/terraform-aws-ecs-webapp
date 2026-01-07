@@ -70,6 +70,15 @@ variable "environment_variables" {
   default = []
 }
 
+variable "secret_variables" {
+  description = "Secrets to pass to the container. Each secret must have 'name' and 'valueFrom' (ARN of SSM Parameter Store or Secrets Manager)"
+  type = list(object({
+    name      = string
+    valueFrom = string
+  }))
+  default = []
+}
+
 variable "health_check" {
   description = "Target Group health check configuration"
   type = object({

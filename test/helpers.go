@@ -21,6 +21,8 @@ type InfrastructureOutputs struct {
 	ClusterName            string
 	CloudWatchLogGroupName string
 	AWSRegion              string
+	TestSecretARN          string
+	APIKeyARN              string
 }
 
 // setupInfrastructure applies the infrastructure fixtures and returns outputs
@@ -57,6 +59,8 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 		ClusterName:            terraform.Output(t, terraformOptions, "cluster_name"),
 		CloudWatchLogGroupName: terraform.Output(t, terraformOptions, "cloudwatch_log_group_name"),
 		AWSRegion:              terraform.Output(t, terraformOptions, "aws_region"),
+		TestSecretARN:          terraform.Output(t, terraformOptions, "test_secret_arn"),
+		APIKeyARN:              terraform.Output(t, terraformOptions, "api_key_arn"),
 	}
 
 	t.Logf("✅ Infrastructure outputs retrieved:")
@@ -66,6 +70,8 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 	t.Logf("   ALB Security Group ID: %s", outputs.ALBSecurityGroupID)
 	t.Logf("   Cluster Name: %s", outputs.ClusterName)
 	t.Logf("   Log Group Name: %s", outputs.CloudWatchLogGroupName)
+	t.Logf("   Test Secret ARN: %s", outputs.TestSecretARN)
+	t.Logf("   API Key ARN: %s", outputs.APIKeyARN)
 
 	return terraformOptions, outputs
 }
@@ -114,6 +120,16 @@ func setupModuleOptions(t *testing.T, moduleDir string, outputs *InfrastructureO
 			"alb_listener_arn":          outputs.ALBListenerARN,
 			"alb_security_group_id":     outputs.ALBSecurityGroupID,
 			"cloudwatch_log_group_name": outputs.CloudWatchLogGroupName,
+			"secret_variables": []map[string]interface{}{
+				{
+					"name":      "TEST_SECRET",
+					"valueFrom": outputs.TestSecretARN,
+				},
+				{
+					"name":      "API_KEY",
+					"valueFrom": outputs.APIKeyARN,
+				},
+			},
 			"health_check": map[string]interface{}{
 				"path":                "/",
 				"interval":            30,
