@@ -76,9 +76,16 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 	if bucketExists {
 		t.Logf("   S3 bucket '%s' already exists, importing to state...", bucketName)
 		// Import the existing bucket into Terraform state to avoid creation errors
-		importBucketResource := "aws_s3_bucket.terraform_state"
-		importBucketID := bucketName
-		_, importErr := terraform.RunTerraformCommandE(t, bootstrapOptions, "import", importBucketResource, importBucketID)
+		// Use -var flags to pass variables and -input=false to avoid interactive prompts
+		importArgs := []string{
+			"import",
+			"-input=false",
+			"-var", fmt.Sprintf("test_name=%s", testName),
+			"-var", fmt.Sprintf("aws_region=%s", awsRegion),
+			"aws_s3_bucket.terraform_state",
+			bucketName,
+		}
+		_, importErr := terraform.RunTerraformCommandE(t, bootstrapOptions, importArgs...)
 		if importErr != nil {
 			t.Logf("   ⚠️  Could not import S3 bucket (may already be in state): %v", importErr)
 		} else {
@@ -91,9 +98,16 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 	if tableExists {
 		t.Logf("   DynamoDB table '%s' already exists, importing to state...", dynamoTableName)
 		// Import the existing table into Terraform state to avoid creation errors
-		importTableResource := "aws_dynamodb_table.terraform_locks"
-		importTableID := dynamoTableName
-		_, importErr := terraform.RunTerraformCommandE(t, bootstrapOptions, "import", importTableResource, importTableID)
+		// Use -var flags to pass variables and -input=false to avoid interactive prompts
+		importArgs := []string{
+			"import",
+			"-input=false",
+			"-var", fmt.Sprintf("test_name=%s", testName),
+			"-var", fmt.Sprintf("aws_region=%s", awsRegion),
+			"aws_dynamodb_table.terraform_locks",
+			dynamoTableName,
+		}
+		_, importErr := terraform.RunTerraformCommandE(t, bootstrapOptions, importArgs...)
 		if importErr != nil {
 			t.Logf("   ⚠️  Could not import DynamoDB table (may already be in state): %v", importErr)
 		} else {
