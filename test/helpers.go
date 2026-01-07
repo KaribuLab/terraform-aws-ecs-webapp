@@ -8,6 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/s3"
 	terratestaws "github.com/gruntwork-io/terratest/modules/aws"
 	"github.com/gruntwork-io/terratest/modules/terraform"
 )
@@ -66,9 +69,59 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 	}
 
 	// Initialize without backend and apply bootstrap resources
-	// If resources already exist, Terraform will update them
 	terraform.Init(t, bootstrapOptions)
-	terraform.Apply(t, bootstrapOptions)
+
+	// Check if S3 bucket already exists (it's shared across all tests)
+	bucketExists := checkS3BucketExists(t, awsRegion, bucketName)
+	if bucketExists {
+		t.Logf("   S3 bucket '%s' already exists, importing to state...", bucketName)
+		// Import the existing bucket into Terraform state to avoid creation errors
+		importBucketResource := "aws_s3_bucket.terraform_state"
+		importBucketID := bucketName
+		_, importErr := terraform.RunTerraformCommandE(t, bootstrapOptions, "import", importBucketResource, importBucketID)
+		if importErr != nil {
+			t.Logf("   ⚠️  Could not import S3 bucket (may already be in state): %v", importErr)
+		} else {
+			t.Logf("   ✅ S3 bucket imported to state")
+		}
+	}
+
+	// Check if DynamoDB table already exists (it's shared across all tests)
+	tableExists := checkDynamoDBTableExists(t, awsRegion, dynamoTableName)
+	if tableExists {
+		t.Logf("   DynamoDB table '%s' already exists, importing to state...", dynamoTableName)
+		// Import the existing table into Terraform state to avoid creation errors
+		importTableResource := "aws_dynamodb_table.terraform_locks"
+		importTableID := dynamoTableName
+		_, importErr := terraform.RunTerraformCommandE(t, bootstrapOptions, "import", importTableResource, importTableID)
+		if importErr != nil {
+			t.Logf("   ⚠️  Could not import DynamoDB table (may already be in state): %v", importErr)
+		} else {
+			t.Logf("   ✅ DynamoDB table imported to state")
+		}
+	}
+
+	// Use ApplyE to handle errors gracefully (e.g., S3 bucket already exists)
+	// The DynamoDB table is shared across all tests, so it may already exist
+	_, err := terraform.ApplyE(t, bootstrapOptions)
+	if err != nil {
+		// Check if error is due to resource already existing
+		errStr := err.Error()
+		if strings.Contains(errStr, "already exists") ||
+			strings.Contains(errStr, "ResourceInUseException") ||
+			strings.Contains(errStr, "TableAlreadyExistsException") ||
+			strings.Contains(errStr, "BucketAlreadyOwnedByYou") ||
+			strings.Contains(errStr, "BucketAlreadyExists") {
+			t.Logf("⚠️  Some bootstrap resources already exist, this is expected")
+			t.Logf("   DynamoDB table and S3 bucket are shared resources")
+			t.Logf("   Continuing with existing resources...")
+		} else {
+			// For other errors, fail the test
+			t.Fatalf("Failed to apply bootstrap resources: %v", err)
+		}
+	} else {
+		t.Logf("✅ Bootstrap resources created successfully")
+	}
 	t.Logf("✅ Backend resources ready")
 
 	// Step 2: Now initialize with backend and apply the rest
@@ -124,7 +177,7 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 // teardownInfrastructure destroys the infrastructure fixtures
 func teardownInfrastructure(t *testing.T, terraformOptions *terraform.Options) {
 	t.Logf("🧹 Tearing down infrastructure fixtures...")
-	
+
 	// Use DestroyE to handle errors gracefully
 	// This allows cleanup to continue even if there are issues
 	_, err := terraform.DestroyE(t, terraformOptions)
@@ -142,7 +195,7 @@ func teardownInfrastructure(t *testing.T, terraformOptions *terraform.Options) {
 // cleanupModule destroys the module resources
 func cleanupModule(t *testing.T, terraformOptions *terraform.Options) {
 	t.Logf("🧹 Tearing down module resources...")
-	
+
 	// Use DestroyE to handle errors gracefully
 	_, err := terraform.DestroyE(t, terraformOptions)
 	if err != nil {
@@ -275,4 +328,28 @@ func getAWSAccountID(t *testing.T, region string) string {
 	// Use Terratest AWS module to get caller identity
 	accountID := terratestaws.GetAccountId(t)
 	return accountID
+}
+
+// checkDynamoDBTableExists checks if a DynamoDB table exists
+func checkDynamoDBTableExists(t *testing.T, region, tableName string) bool {
+	dynamoClient := terratestaws.NewDynamoDBClient(t, region)
+
+	// Try to describe the table
+	_, err := dynamoClient.DescribeTable(&dynamodb.DescribeTableInput{
+		TableName: aws.String(tableName),
+	})
+
+	return err == nil
+}
+
+// checkS3BucketExists checks if an S3 bucket exists
+func checkS3BucketExists(t *testing.T, region, bucketName string) bool {
+	s3Client := terratestaws.NewS3Client(t, region)
+
+	// Try to head the bucket (lightweight operation to check existence)
+	_, err := s3Client.HeadBucket(&s3.HeadBucketInput{
+		Bucket: aws.String(bucketName),
+	})
+
+	return err == nil
 }
