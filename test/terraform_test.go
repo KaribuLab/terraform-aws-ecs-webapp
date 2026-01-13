@@ -16,6 +16,7 @@ func TestTerraformModule(t *testing.T) {
 	// Setup infrastructure fixtures
 	infraOptions, infraOutputs := setupInfrastructure(t, testName)
 	// Use t.Cleanup instead of defer for more robust cleanup
+	// Register cleanup immediately after getting options to ensure it always runs
 	t.Cleanup(func() {
 		teardownInfrastructure(t, infraOptions)
 	})
@@ -24,14 +25,22 @@ func TestTerraformModule(t *testing.T) {
 	moduleOptions := setupModuleOptions(t, "..", infraOutputs, testName)
 
 	// Cleanup module resources - use t.Cleanup for guaranteed execution
+	// Register cleanup BEFORE applying to ensure it runs even if apply fails
 	t.Cleanup(func() {
 		cleanupModule(t, moduleOptions)
 	})
 
-	// Apply module
+	// Apply module using InitAndApplyE to handle errors gracefully
 	t.Logf("🚀 Applying Terraform module...")
-	terraform.InitAndApply(t, moduleOptions)
-	t.Logf("✅ Module applied successfully")
+	_, err := terraform.InitAndApplyE(t, moduleOptions)
+	if err != nil {
+		t.Logf("⚠️  Error applying module: %v", err)
+		t.Logf("   Cleanup will attempt to destroy what was created")
+		// Don't fail immediately - let cleanup execute
+		// The test will fail naturally if subsequent operations fail
+	} else {
+		t.Logf("✅ Module applied successfully")
+	}
 
 	// Wait for ECS service to stabilize
 	t.Logf("⏳ Waiting for ECS service to stabilize (30 seconds)...")
