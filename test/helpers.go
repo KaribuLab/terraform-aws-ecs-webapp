@@ -266,6 +266,15 @@ func teardownInfrastructure(t *testing.T, terraformOptions *terraform.Options) {
 		if isResourceNotFoundError(err) {
 			t.Logf("✅ Resources already destroyed or not found (this is expected)")
 			t.Logf("   Error details: %v", err)
+		} else if isBucketNotEmptyError(err) {
+			// BucketNotEmpty is expected - the bucket is shared and may contain state from other tests
+			// With force_destroy=true, Terraform should handle this, but if it doesn't, it's not critical
+			t.Logf("⚠️  Warning: S3 bucket could not be deleted (may contain state from other tests)")
+			t.Logf("   This is expected for shared test infrastructure")
+			t.Logf("   The bucket will be reused in future test runs")
+			if bucket, ok := terraformOptions.BackendConfig["bucket"].(string); ok {
+				t.Logf("   State bucket: %s", bucket)
+			}
 		} else {
 			t.Logf("⚠️  Warning: Error during infrastructure teardown: %v", err)
 			t.Logf("   Resources may need manual cleanup")
@@ -470,4 +479,17 @@ func isResourceNotFoundError(err error) bool {
 		}
 	}
 	return false
+}
+
+// isBucketNotEmptyError checks if an error indicates that an S3 bucket cannot be deleted because it's not empty
+// This is useful for treating "bucket not empty" errors as a non-fatal warning during cleanup
+// The bucket is shared across tests and may contain state from other test runs
+func isBucketNotEmptyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "bucketnotempty") ||
+		strings.Contains(errStr, "bucket is not empty") ||
+		strings.Contains(errStr, "you must delete all versions")
 }

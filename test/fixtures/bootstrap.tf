@@ -9,6 +9,10 @@ data "aws_caller_identity" "current" {}
 resource "aws_s3_bucket" "terraform_state" {
   bucket = "terraform-ecs-webapp-test-${var.aws_region}-${data.aws_caller_identity.current.account_id}"
 
+  # Force destroy allows Terraform to delete the bucket even if it contains objects
+  # This is safe for test infrastructure and allows cleanup to succeed
+  force_destroy = true
+
   tags = {
     Name        = "Terraform State for ECS WebApp Tests"
     Purpose     = "terraform-state"
