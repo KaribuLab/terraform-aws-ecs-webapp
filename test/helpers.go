@@ -242,16 +242,76 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 	}
 
 	t.Logf("✅ Infrastructure outputs retrieved:")
-	t.Logf("   VPC ID: %s", outputs.VPCID)
-	t.Logf("   Private Subnets: %v", outputs.PrivateSubnetIDs)
-	t.Logf("   ALB Listener ARN: %s", outputs.ALBListenerARN)
-	t.Logf("   ALB Security Group ID: %s", outputs.ALBSecurityGroupID)
-	t.Logf("   Cluster Name: %s", outputs.ClusterName)
-	t.Logf("   Log Group Name: %s", outputs.CloudWatchLogGroupName)
-	t.Logf("   Test Secret ARN: %s", outputs.TestSecretARN)
-	t.Logf("   API Key ARN: %s", outputs.APIKeyARN)
+	// Helper function to format output values, showing "(not available)" if empty
+	formatOutput := func(value string) string {
+		if value == "" {
+			return "(not available)"
+		}
+		return value
+	}
+
+	t.Logf("   VPC ID: %s", formatOutput(outputs.VPCID))
+	if len(outputs.PrivateSubnetIDs) > 0 {
+		t.Logf("   Private Subnets: %v", outputs.PrivateSubnetIDs)
+	} else {
+		t.Logf("   Private Subnets: (not available)")
+	}
+	if len(outputs.PublicSubnetIDs) > 0 {
+		t.Logf("   Public Subnets: %v", outputs.PublicSubnetIDs)
+	} else {
+		t.Logf("   Public Subnets: (not available)")
+	}
+	t.Logf("   ALB Listener ARN: %s", formatOutput(outputs.ALBListenerARN))
+	t.Logf("   ALB Security Group ID: %s", formatOutput(outputs.ALBSecurityGroupID))
+	t.Logf("   Cluster Name: %s", formatOutput(outputs.ClusterName))
+	t.Logf("   Log Group Name: %s", formatOutput(outputs.CloudWatchLogGroupName))
+	t.Logf("   Test Secret ARN: %s", formatOutput(outputs.TestSecretARN))
+	t.Logf("   API Key ARN: %s", formatOutput(outputs.APIKeyARN))
+
+	// Validate that critical outputs are present before continuing
+	validateInfrastructureOutputs(t, outputs)
 
 	return terraformOptions, outputs
+}
+
+// validateInfrastructureOutputs validates that critical infrastructure outputs are present
+// This prevents Terraform from failing later with invalid values like empty strings
+func validateInfrastructureOutputs(t *testing.T, outputs *InfrastructureOutputs) {
+	var missingOutputs []string
+
+	if outputs.VPCID == "" {
+		missingOutputs = append(missingOutputs, "vpc_id")
+	}
+	if len(outputs.PrivateSubnetIDs) == 0 {
+		missingOutputs = append(missingOutputs, "private_subnet_ids")
+	}
+	if outputs.ALBListenerARN == "" {
+		missingOutputs = append(missingOutputs, "alb_listener_arn")
+	}
+	if outputs.ALBSecurityGroupID == "" {
+		missingOutputs = append(missingOutputs, "alb_security_group_id")
+	}
+	if outputs.ClusterName == "" {
+		missingOutputs = append(missingOutputs, "cluster_name")
+	}
+	if outputs.CloudWatchLogGroupName == "" {
+		missingOutputs = append(missingOutputs, "cloudwatch_log_group_name")
+	}
+	if outputs.TestSecretARN == "" {
+		missingOutputs = append(missingOutputs, "test_secret_arn")
+	}
+	if outputs.APIKeyARN == "" {
+		missingOutputs = append(missingOutputs, "api_key_arn")
+	}
+
+	if len(missingOutputs) > 0 {
+		t.Errorf("❌ Critical infrastructure outputs are missing: %v", missingOutputs)
+		t.Errorf("   This usually means the infrastructure fixtures failed to apply correctly")
+		t.Errorf("   Check the logs above for errors during terraform apply")
+		t.Errorf("   Cleanup will still execute to remove any partially created resources")
+		// Don't use t.Fatalf here - allow cleanup to execute
+		// The test will fail naturally when Terraform tries to use invalid values
+	}
 }
 
 // teardownInfrastructure destroys the infrastructure fixtures
