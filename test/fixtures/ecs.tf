@@ -27,6 +27,7 @@ resource "aws_ssm_parameter" "test_secret" {
   description = "Test secret for ECS service"
   type        = "SecureString"
   value       = "test-secret-value"
+  overwrite   = true
 
   tags = {
     Name      = "terratest-fixtures-test-secret"
@@ -40,6 +41,7 @@ resource "aws_ssm_parameter" "api_key" {
   description = "API key secret for ECS service"
   type        = "SecureString"
   value       = "test-api-key-12345"
+  overwrite   = true
 
   tags = {
     Name      = "terratest-fixtures-api-key"
