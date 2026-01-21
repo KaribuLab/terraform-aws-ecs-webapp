@@ -10,7 +10,7 @@ import (
 
 func testTargetGroup(t *testing.T, moduleOptions *terraform.Options, infraOutputs *InfrastructureOutputs) {
 	// Skip this test if ALB is not configured
-	if infraOutputs.ALBListenerARN == "" {
+	if infraOutputs.ALBLoadBalancerARN == "" {
 		t.Logf("⏭️  Skipping Target Group test (ALB not configured)")
 		return
 	}

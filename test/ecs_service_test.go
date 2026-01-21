@@ -84,7 +84,7 @@ func testECSService(t *testing.T, moduleOptions *terraform.Options, infraOutputs
 	require.Equal(t, expectedSubnetCount, actualSubnetCount)
 
 	// Verify load balancer configuration (only if ALB is configured)
-	if infraOutputs.ALBListenerARN != "" {
+	if infraOutputs.ALBLoadBalancerARN != "" {
 		t.Logf("⚖️  Verifying load balancer configuration...")
 		t.Logf("   Load Balancers count: %d (expected: 1)", len(ecsService.LoadBalancers))
 		require.Len(t, ecsService.LoadBalancers, 1, "Service should have exactly one load balancer when ALB is configured")

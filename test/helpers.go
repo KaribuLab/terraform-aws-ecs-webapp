@@ -20,7 +20,7 @@ type InfrastructureOutputs struct {
 	VPCID                  string
 	PrivateSubnetIDs       []string
 	PublicSubnetIDs        []string
-	ALBListenerARN         string   // Optional - empty if ALB is not configured
+	ALBLoadBalancerARN     string   // Optional - empty if ALB is not configured
 	ALBSecurityGroupID     string   // Optional - empty if ALB is not configured
 	ServiceDiscoveryNSID   string   // Optional - namespace ID for service discovery
 	ClusterName            string
@@ -216,10 +216,10 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 		t.Logf("⚠️  Could not read public_subnet_ids output: %v", err)
 	}
 
-	if albListenerARN, err := terraform.OutputE(t, terraformOptions, "alb_listener_arn"); err == nil {
-		outputs.ALBListenerARN = albListenerARN
+	if albLoadBalancerARN, err := terraform.OutputE(t, terraformOptions, "alb_load_balancer_arn"); err == nil {
+		outputs.ALBLoadBalancerARN = albLoadBalancerARN
 	} else {
-		t.Logf("⚠️  Could not read alb_listener_arn output: %v", err)
+		t.Logf("⚠️  Could not read alb_load_balancer_arn output: %v", err)
 	}
 
 	if albSGID, err := terraform.OutputE(t, terraformOptions, "alb_security_group_id"); err == nil {
@@ -272,7 +272,7 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 	} else {
 		t.Logf("   Public Subnets: (not available)")
 	}
-	t.Logf("   ALB Listener ARN: %s", formatOutput(outputs.ALBListenerARN))
+	t.Logf("   ALB Load Balancer ARN: %s", formatOutput(outputs.ALBLoadBalancerARN))
 	t.Logf("   ALB Security Group ID: %s", formatOutput(outputs.ALBSecurityGroupID))
 	t.Logf("   Cluster Name: %s", formatOutput(outputs.ClusterName))
 	t.Logf("   Log Group Name: %s", formatOutput(outputs.CloudWatchLogGroupName))
@@ -449,8 +449,8 @@ func setupModuleOptions(t *testing.T, moduleDir string, outputs *InfrastructureO
 	}
 
 	// Add ALB-related variables only if ALB is configured
-	if outputs.ALBListenerARN != "" && outputs.ALBSecurityGroupID != "" {
-		vars["alb_listener_arn"] = outputs.ALBListenerARN
+	if outputs.ALBLoadBalancerARN != "" && outputs.ALBSecurityGroupID != "" {
+		vars["alb_load_balancer_arn"] = outputs.ALBLoadBalancerARN
 		vars["alb_security_group_id"] = outputs.ALBSecurityGroupID
 		vars["health_check"] = map[string]interface{}{
 			"path":                "/",

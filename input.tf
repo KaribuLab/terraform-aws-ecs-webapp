@@ -38,8 +38,8 @@ variable "vpc_id" {
   type        = string
 }
 
-variable "alb_listener_arn" {
-  description = "ARN of the ALB listener (HTTP or HTTPS). Required if using ALB."
+variable "alb_load_balancer_arn" {
+  description = "ARN of the ALB load balancer (HTTP or HTTPS). Required if using ALB."
   type        = string
   default     = null
 }

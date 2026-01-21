@@ -13,9 +13,9 @@ output "public_subnet_ids" {
   value       = aws_subnet.public[*].id
 }
 
-output "alb_listener_arn" {
-  description = "ARN of the ALB listener"
-  value       = aws_lb_listener.main.arn
+output "alb_load_balancer_arn" {
+  description = "ARN of the ALB load balancer"
+  value       = aws_lb.main.arn
 }
 
 output "alb_security_group_id" {

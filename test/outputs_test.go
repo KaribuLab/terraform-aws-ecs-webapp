@@ -11,7 +11,7 @@ import (
 func testOutputs(t *testing.T, moduleOptions *terraform.Options, infraOutputs *InfrastructureOutputs) {
 	// Test all outputs exist and have values
 	albTargetGroupARN := terraform.Output(t, moduleOptions, "alb_target_group_arn")
-	if infraOutputs.ALBListenerARN != "" {
+	if infraOutputs.ALBLoadBalancerARN != "" {
 		// ALB is configured, verify target group ARN
 		require.NotEmpty(t, albTargetGroupARN, "Target Group ARN should not be empty when ALB is configured")
 		require.True(t, strings.HasPrefix(albTargetGroupARN, "arn:aws:elasticloadbalancing"))

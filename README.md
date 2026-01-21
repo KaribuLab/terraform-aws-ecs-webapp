@@ -15,7 +15,7 @@ Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con ba
 | task_memory                       | string       | Amount of memory for the ECS task (in MiB)                                                                          | yes      |
 | subnet_ids                        | list(string) | IDs of private subnets for ECS tasks. IMPORTANT: Must be private subnets as tasks are configured without public IPs | yes      |
 | vpc_id                            | string       | VPC ID where resources will be created                                                                              | yes      |
-| alb_listener_arn                  | string       | ARN of the ALB listener (HTTP or HTTPS). Required if using ALB.                                                     | no       |
+| alb_load_balancer_arn             | string       | ARN of the ALB load balancer. Required if using ALB.                                                                | no       |
 | alb_security_group_id             | string       | ID del security group del Application Load Balancer. Required if using ALB.                                         | no       |
 | service_discovery                 | object       | Service Discovery configuration for the ECS service. Required if ALB is not configured.                             | no       |
 | environment_variables             | list(object) | [Environment variables](#environment-variables) to pass to the container                                            | no       |
@@ -93,7 +93,7 @@ Al menos uno de `path_patterns` o `host_headers` debe ser proporcionado.
 | memory            | object | [Memory autoscaling configuration](#memory-autoscaling-configuration)           | no       |
 | alb_request_count | object | [ALB request count autoscaling configuration](#alb-request-count-configuration) | no       |
 
-At least one of `cpu`, `memory`, or `alb_request_count` must be provided. When `min_capacity = 0`, `alb_request_count` is required to enable automatic scaling from 0. **Note:** `alb_request_count` requires ALB to be configured (`alb_listener_arn` must be provided).
+At least one of `cpu`, `memory`, or `alb_request_count` must be provided. When `min_capacity = 0`, `alb_request_count` is required to enable automatic scaling from 0. **Note:** `alb_request_count` requires ALB to be configured (`alb_load_balancer_arn` must be provided).
 
 #### CPU Autoscaling Configuration
 
@@ -172,9 +172,9 @@ El módulo soporta dos formas de acceso al servicio ECS:
 2. **Service Discovery**: Para servicios que solo necesitan ser accesibles desde dentro de la VPC mediante DNS.
 
 **Requisitos:**
-- Debe proporcionarse **al menos uno** de los dos: `alb_listener_arn` o `service_discovery`.
-- Si se proporciona `alb_listener_arn`, también se requieren `alb_security_group_id`, `health_check`, y al menos una regla en `listener_rules`.
-- Si no se proporciona `alb_listener_arn`, se debe proporcionar `service_discovery`.
+- Debe proporcionarse **al menos uno** de los dos: `alb_load_balancer_arn` o `service_discovery`.
+- Si se proporciona `alb_load_balancer_arn`, también se requieren `alb_security_group_id`, `health_check`, y al menos una regla en `listener_rules`.
+- Si no se proporciona `alb_load_balancer_arn`, se debe proporcionar `service_discovery`.
 
 **Cuándo usar cada uno:**
 - **Usar ALB**: Servicios web públicos, APIs REST accesibles desde Internet, servicios que requieren SSL/TLS termination, balanceo de carga entre múltiples instancias.
@@ -198,7 +198,7 @@ module "ecs_webapp" {
   task_memory         = "512"
   subnet_ids          = ["subnet-abcdef", "subnet-123456"]
   vpc_id              = "vpc-abcdef123"
-  alb_listener_arn    = "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/app/my-alb/abcdef/123456789"
+  alb_load_balancer_arn = "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/my-alb/abcdef123456"
   alb_security_group_id = "sg-alb123456"  # ID of the ALB security group
 
   health_check = {
