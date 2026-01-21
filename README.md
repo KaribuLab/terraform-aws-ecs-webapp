@@ -1,6 +1,6 @@
 # Terraform AWS ECS WebApp
 
-Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con balanceo de carga.
+Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con balanceo de carga (ALB o Service Discovery).
 
 ## Inputs
 
