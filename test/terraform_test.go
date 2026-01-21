@@ -14,21 +14,32 @@ func TestTerraformModule(t *testing.T) {
 	testName := sanitizeName(getRandomName("terratest"))
 
 	// Setup infrastructure fixtures
-	infraOptions, infraOutputs := setupInfrastructure(t, testName)
-	// Use t.Cleanup instead of defer for more robust cleanup
-	// Register cleanup immediately after getting options to ensure it always runs
-	t.Cleanup(func() {
-		teardownInfrastructure(t, infraOptions)
-	})
+	// This now returns options even if there are errors, so cleanup can always run
+	infraOptions, infraOutputs, infraErr := setupInfrastructure(t, testName)
+
+	// CRITICAL: Register cleanup IMMEDIATELY after getting options
+	// This ensures cleanup runs even if subsequent operations fail
+	if infraOptions != nil {
+		t.Cleanup(func() {
+			teardownInfrastructure(t, infraOptions)
+		})
+	}
+
+	// If infrastructure setup had fatal errors, fail now (after registering cleanup)
+	if infraErr != nil {
+		t.Fatalf("❌ Failed to setup infrastructure: %v", infraErr)
+	}
 
 	// Setup module options
 	moduleOptions := setupModuleOptions(t, "..", infraOutputs, testName)
 
-	// Cleanup module resources - use t.Cleanup for guaranteed execution
-	// Register cleanup BEFORE applying to ensure it runs even if apply fails
-	t.Cleanup(func() {
-		cleanupModule(t, moduleOptions)
-	})
+	// CRITICAL: Register module cleanup BEFORE applying
+	// This ensures cleanup runs even if apply fails
+	if moduleOptions != nil {
+		t.Cleanup(func() {
+			cleanupModule(t, moduleOptions)
+		})
+	}
 
 	// Apply module using InitAndApplyE to handle errors gracefully
 	t.Logf("🚀 Applying Terraform module...")

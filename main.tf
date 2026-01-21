@@ -93,7 +93,9 @@ resource "aws_ecs_service" "webapp" {
     rollback = var.enable_deployment_circuit_breaker
   }
 
-  depends_on = var.alb_listener_arn != null ? [aws_lb_listener_rule.webapp] : []
+  # When ALB is configured, depend on listener rules being created first
+  # When for_each is empty (no ALB), this dependency is a no-op
+  depends_on = [aws_lb_listener_rule.webapp]
 
   tags = var.common_tags
 }

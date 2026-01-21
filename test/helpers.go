@@ -31,7 +31,8 @@ type InfrastructureOutputs struct {
 }
 
 // setupInfrastructure applies the infrastructure fixtures and returns outputs
-func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *InfrastructureOutputs) {
+// Returns (options, outputs, error) - options is always returned so cleanup can run even if there are errors
+func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *InfrastructureOutputs, error) {
 	fixturesDir := "../test/fixtures"
 	awsRegion := getAWSRegion()
 
@@ -47,6 +48,23 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 
 	t.Logf("   State Bucket: %s", bucketName)
 	t.Logf("   Lock Table: %s", dynamoTableName)
+
+	// Create the main terraform options FIRST so we can return them for cleanup even if init fails
+	terraformOptions := &terraform.Options{
+		TerraformDir:    fixturesDir,
+		TerraformBinary: "terraform",
+		BackendConfig: map[string]interface{}{
+			"bucket":         bucketName,
+			"key":            "fixtures/terraform.tfstate",
+			"region":         awsRegion,
+			"dynamodb_table": dynamoTableName,
+			"encrypt":        true,
+		},
+		Vars: map[string]interface{}{
+			"aws_region": awsRegion,
+		},
+		NoColor: true,
+	}
 
 	// Step 1: Bootstrap S3 bucket and DynamoDB table (without backend)
 	// Create bootstrap resources first, then migrate state to backend
@@ -69,7 +87,11 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 	}
 
 	// Initialize without backend and apply bootstrap resources
-	terraform.Init(t, bootstrapOptions)
+	// Use InitE to handle errors gracefully - we want to return options for cleanup even if init fails
+	if _, err := terraform.InitE(t, bootstrapOptions); err != nil {
+		t.Logf("❌ Error initializing bootstrap: %v", err)
+		return terraformOptions, nil, fmt.Errorf("failed to initialize bootstrap: %w", err)
+	}
 
 	// Check if S3 bucket already exists (it's shared across all tests)
 	bucketExists := checkS3BucketExists(t, awsRegion, bucketName)
@@ -138,24 +160,12 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 	t.Logf("✅ Backend resources ready")
 
 	// Step 2: Now initialize with backend and apply the rest
-	terraformOptions := &terraform.Options{
-		TerraformDir:    fixturesDir,
-		TerraformBinary: "terraform",
-		BackendConfig: map[string]interface{}{
-			"bucket":         bucketName,
-			"key":            "fixtures/terraform.tfstate",
-			"region":         awsRegion,
-			"dynamodb_table": dynamoTableName,
-			"encrypt":        true,
-		},
-		Vars: map[string]interface{}{
-			"aws_region": awsRegion,
-		},
-		NoColor: true,
-	}
-
 	t.Logf("📦 Initializing with backend and applying infrastructure fixtures...")
-	terraform.Init(t, terraformOptions)
+	// Use InitE to handle errors gracefully - we want to return options for cleanup even if init fails
+	if _, err := terraform.InitE(t, terraformOptions); err != nil {
+		t.Logf("❌ Error initializing with backend: %v", err)
+		return terraformOptions, nil, fmt.Errorf("failed to initialize with backend: %w", err)
+	}
 
 	// Use ApplyE to handle errors gracefully - this allows cleanup to execute even if apply fails
 	_, err = terraform.ApplyE(t, terraformOptions)
@@ -272,7 +282,7 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 	// Validate that critical outputs are present before continuing
 	validateInfrastructureOutputs(t, outputs)
 
-	return terraformOptions, outputs
+	return terraformOptions, outputs, nil
 }
 
 // validateInfrastructureOutputs validates that critical infrastructure outputs are present
@@ -315,6 +325,12 @@ func validateInfrastructureOutputs(t *testing.T, outputs *InfrastructureOutputs)
 func teardownInfrastructure(t *testing.T, terraformOptions *terraform.Options) {
 	t.Logf("🧹 Tearing down infrastructure fixtures...")
 
+	// Handle nil options gracefully
+	if terraformOptions == nil {
+		t.Logf("⚠️  No terraform options provided, skipping infrastructure teardown")
+		return
+	}
+
 	// Use DestroyE to handle errors gracefully
 	// This allows cleanup to continue even if there are issues
 	_, err := terraform.DestroyE(t, terraformOptions)
@@ -347,6 +363,12 @@ func teardownInfrastructure(t *testing.T, terraformOptions *terraform.Options) {
 // cleanupModule destroys the module resources
 func cleanupModule(t *testing.T, terraformOptions *terraform.Options) {
 	t.Logf("🧹 Tearing down module resources...")
+
+	// Handle nil options gracefully
+	if terraformOptions == nil {
+		t.Logf("⚠️  No terraform options provided, skipping module teardown")
+		return
+	}
 
 	// Use DestroyE to handle errors gracefully
 	_, err := terraform.DestroyE(t, terraformOptions)
