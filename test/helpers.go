@@ -319,6 +319,13 @@ func validateInfrastructureOutputs(t *testing.T, outputs *InfrastructureOutputs)
 		// Don't use t.Fatalf here - allow cleanup to execute
 		// The test will fail naturally when Terraform tries to use invalid values
 	}
+
+	// Validate that either ALB or Service Discovery is available (required by the module)
+	if outputs.ALBLoadBalancerARN == "" && outputs.ServiceDiscoveryNSID == "" {
+		t.Errorf("❌ Neither ALB nor Service Discovery is available")
+		t.Errorf("   The module requires at least one of: alb_load_balancer_arn or service_discovery")
+		t.Errorf("   Current fixtures create ALB by default - check if ALB creation failed")
+	}
 }
 
 // teardownInfrastructure destroys the infrastructure fixtures
