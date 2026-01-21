@@ -4,32 +4,32 @@ Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con ba
 
 ## Inputs
 
-| Name                              | Type         | Description                                                              | Required |
-| --------------------------------- | ------------ | ------------------------------------------------------------------------ | -------- |
-| cluster_name                      | string       | Name of the ECS Cluster                                                  | yes      |
-| service_name                      | string       | Name of the ECS service                                                  | yes      |
-| docker_image                      | string       | Docker image in ECR                                                      | yes      |
-| image_tag                         | string       | Image tag (default: "latest")                                            | no       |
-| container_port                    | number       | Port exposed by the container                                            | yes      |
-| task_cpu                          | string       | Amount of CPU for the ECS task (in CPU units)                            | yes      |
-| task_memory                       | string       | Amount of memory for the ECS task (in MiB)                               | yes      |
+| Name                              | Type         | Description                                                                                                         | Required |
+| --------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------- | -------- |
+| cluster_name                      | string       | Name of the ECS Cluster                                                                                             | yes      |
+| service_name                      | string       | Name of the ECS service                                                                                             | yes      |
+| docker_image                      | string       | Docker image in ECR                                                                                                 | yes      |
+| image_tag                         | string       | Image tag (default: "latest")                                                                                       | no       |
+| container_port                    | number       | Port exposed by the container                                                                                       | yes      |
+| task_cpu                          | string       | Amount of CPU for the ECS task (in CPU units)                                                                       | yes      |
+| task_memory                       | string       | Amount of memory for the ECS task (in MiB)                                                                          | yes      |
 | subnet_ids                        | list(string) | IDs of private subnets for ECS tasks. IMPORTANT: Must be private subnets as tasks are configured without public IPs | yes      |
-| vpc_id                            | string       | VPC ID where resources will be created                                   | yes      |
-| alb_listener_arn                  | string       | ARN of the ALB listener (HTTP or HTTPS). Required if using ALB.         | no       |
-| alb_security_group_id             | string       | ID del security group del Application Load Balancer. Required if using ALB. | no       |
-| service_discovery                 | object       | Service Discovery configuration for the ECS service. Required if ALB is not configured. | no       |
-| environment_variables             | list(object) | [Environment variables](#environment-variables) to pass to the container | no       |
-| secret_variables                  | list(object) | [Secret variables](#secret-variables) to pass to the container           | no       |
-| health_check                      | object       | [Health check configuration](#health-check). Required if using ALB.     | no       |
-| listener_rules                    | list(object) | [List of listener rules](#listener-rules). Required if using ALB.        | no       |
-| autoscaling_config                | object       | [Auto scaling configuration](#autoscaling-config)                        | yes      |
-| common_tags                       | map(string)  | Common tags to be applied to all resources                               | yes      |
-| task_policy_json                  | string       | IAM Policy document in JSON format for the task role                     | no       |
-| target_group_deregistration_delay | number       | Time for ELB to wait before deregistering targets                        | no       |
-| force_new_deployment              | bool         | Force a new deployment of the service                                    | no       |
-| deployment_config                 | object       | [Deployment configuration](#deployment-config)                           | yes      |
-| enable_deployment_circuit_breaker | bool         | Enable deployment circuit breaker with rollback                          | no       |
-| cloudwatch_log_group_name         | string       | Full name of the CloudWatch Log Group to use (e.g. /ecs/service-name)    | no       |
+| vpc_id                            | string       | VPC ID where resources will be created                                                                              | yes      |
+| alb_listener_arn                  | string       | ARN of the ALB listener (HTTP or HTTPS). Required if using ALB.                                                     | no       |
+| alb_security_group_id             | string       | ID del security group del Application Load Balancer. Required if using ALB.                                         | no       |
+| service_discovery                 | object       | Service Discovery configuration for the ECS service. Required if ALB is not configured.                             | no       |
+| environment_variables             | list(object) | [Environment variables](#environment-variables) to pass to the container                                            | no       |
+| secret_variables                  | list(object) | [Secret variables](#secret-variables) to pass to the container                                                      | no       |
+| health_check                      | object       | [Health check configuration](#health-check). Required if using ALB.                                                 | no       |
+| listener_rules                    | list(object) | [List of listener rules](#listener-rules). Required if using ALB.                                                   | no       |
+| autoscaling_config                | object       | [Auto scaling configuration](#autoscaling-config)                                                                   | yes      |
+| common_tags                       | map(string)  | Common tags to be applied to all resources                                                                          | yes      |
+| task_policy_json                  | string       | IAM Policy document in JSON format for the task role                                                                | no       |
+| target_group_deregistration_delay | number       | Time for ELB to wait before deregistering targets                                                                   | no       |
+| force_new_deployment              | bool         | Force a new deployment of the service                                                                               | no       |
+| deployment_config                 | object       | [Deployment configuration](#deployment-config)                                                                      | yes      |
+| enable_deployment_circuit_breaker | bool         | Enable deployment circuit breaker with rollback                                                                     | no       |
+| cloudwatch_log_group_name         | string       | Full name of the CloudWatch Log Group to use (e.g. /ecs/service-name)                                               | no       |
 
 ### Environment Variables
 
@@ -40,19 +40,19 @@ Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con ba
 
 ### Secret Variables
 
-| Name      | Type   | Description                                                                 | Required |
-| --------- | ------ | --------------------------------------------------------------------------- | -------- |
-| name      | string | Name of the secret variable (environment variable name in the container)     | yes      |
-| valueFrom | string | ARN of the secret in AWS Secrets Manager or SSM Parameter Store             | yes      |
+| Name      | Type   | Description                                                              | Required |
+| --------- | ------ | ------------------------------------------------------------------------ | -------- |
+| name      | string | Name of the secret variable (environment variable name in the container) | yes      |
+| valueFrom | string | ARN of the secret in AWS Secrets Manager or SSM Parameter Store          | yes      |
 
 **Note**: Secret variables must reference secrets stored in AWS Secrets Manager or Systems Manager Parameter Store using their ARNs. The `valueFrom` field should contain the full ARN of the secret (e.g., `arn:aws:ssm:region:account-id:parameter/parameter-name`).
 
 ### Service Discovery Configuration
 
-| Name        | Type   | Description                                  | Required |
-| ----------- | ------ | -------------------------------------------- | -------- |
-| namespace_id | string | ID of the Service Discovery namespace        | yes      |
-| dns         | object | [DNS configuration](#dns-configuration)      | yes      |
+| Name         | Type   | Description                             | Required |
+| ------------ | ------ | --------------------------------------- | -------- |
+| namespace_id | string | ID of the Service Discovery namespace   | yes      |
+| dns          | object | [DNS configuration](#dns-configuration) | yes      |
 
 #### DNS Configuration
 
@@ -85,13 +85,13 @@ Al menos uno de `path_patterns` o `host_headers` debe ser proporcionado.
 
 ### Autoscaling Config
 
-| Name             | Type   | Description                                                                 | Required |
-| ---------------- | ------ | --------------------------------------------------------------------------- | -------- |
-| min_capacity     | number | Minimum task capacity                                                      | yes      |
-| max_capacity     | number | Maximum task capacity                                                      | yes      |
-| cpu              | object | [CPU autoscaling configuration](#cpu-autoscaling-configuration)             | no       |
-| memory           | object | [Memory autoscaling configuration](#memory-autoscaling-configuration)       | no       |
-| alb_request_count| object | [ALB request count autoscaling configuration](#alb-request-count-configuration) | no       |
+| Name              | Type   | Description                                                                     | Required |
+| ----------------- | ------ | ------------------------------------------------------------------------------- | -------- |
+| min_capacity      | number | Minimum task capacity                                                           | yes      |
+| max_capacity      | number | Maximum task capacity                                                           | yes      |
+| cpu               | object | [CPU autoscaling configuration](#cpu-autoscaling-configuration)                 | no       |
+| memory            | object | [Memory autoscaling configuration](#memory-autoscaling-configuration)           | no       |
+| alb_request_count | object | [ALB request count autoscaling configuration](#alb-request-count-configuration) | no       |
 
 At least one of `cpu`, `memory`, or `alb_request_count` must be provided. When `min_capacity = 0`, `alb_request_count` is required to enable automatic scaling from 0. **Note:** `alb_request_count` requires ALB to be configured (`alb_listener_arn` must be provided).
 
@@ -154,15 +154,15 @@ Para habilitar el escalado automático desde 0, **debe proporcionar `alb_request
 
 ## Outputs
 
-| Name                    | Type   | Description                                       |
-| ----------------------- | ------ | ------------------------------------------------- |
+| Name                    | Type   | Description                                                                  |
+| ----------------------- | ------ | ---------------------------------------------------------------------------- |
 | alb_target_group_arn    | string | ARN of the Target Group connected to the ALB. Null if ALB is not configured. |
-| ecs_service_name        | string | Name of the ECS service                           |
-| ecs_task_definition_arn | string | ARN of the ECS task definition                    |
-| iam_execution_role_arn  | string | ARN of the ECS execution role                     |
-| cluster_name            | string | Name of the ECS cluster                           |
-| service_name            | string | Name of the ECS service                           |
-| security_group_id       | string | ID of the security group used for the ECS service |
+| ecs_service_name        | string | Name of the ECS service                                                      |
+| ecs_task_definition_arn | string | ARN of the ECS task definition                                               |
+| iam_execution_role_arn  | string | ARN of the ECS execution role                                                |
+| cluster_name            | string | Name of the ECS cluster                                                      |
+| service_name            | string | Name of the ECS service                                                      |
+| security_group_id       | string | ID of the security group used for the ECS service                            |
 
 ## ALB vs Service Discovery
 
