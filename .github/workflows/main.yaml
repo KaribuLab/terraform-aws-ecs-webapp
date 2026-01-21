@@ -87,7 +87,7 @@ jobs:
     if: needs.check_tag.outputs.tag_exists == 'false' && github.ref == 'refs/heads/main'
     permissions:
       id-token: write
-      contents: read
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
