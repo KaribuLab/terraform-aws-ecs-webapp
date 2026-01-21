@@ -283,11 +283,6 @@ resource "aws_appautoscaling_policy" "alb_request_count" {
 # Get current AWS region
 data "aws_region" "current" {}
 
-# Get VPC information for security group rules
-data "aws_vpc" "main" {
-  id = var.vpc_id
-}
-
 # Security Group for ECS Service
 resource "aws_security_group" "ecs_service" {
   name        = "${var.service_name}-sg"
@@ -325,7 +320,7 @@ resource "aws_security_group_rule" "vpc" {
   from_port                = var.container_port
   to_port                  = var.container_port
   protocol                 = "tcp"
-  cidr_blocks              = [data.aws_vpc.main.cidr_block]
+  cidr_blocks              = [var.vpc_cidr_block]
   security_group_id        = aws_security_group.ecs_service.id
   description              = "Allow traffic from VPC to container port ${var.container_port}"
 }

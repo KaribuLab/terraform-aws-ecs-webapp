@@ -15,6 +15,7 @@ Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con ba
 | task_memory                       | string       | Amount of memory for the ECS task (in MiB)                                                                          | yes      |
 | subnet_ids                        | list(string) | IDs of private subnets for ECS tasks. IMPORTANT: Must be private subnets as tasks are configured without public IPs | yes      |
 | vpc_id                            | string       | VPC ID where resources will be created                                                                              | yes      |
+| vpc_cidr_block                    | string       | CIDR block of the VPC (used for security group rules)                                                               | yes      |
 | alb_load_balancer_arn             | string       | ARN of the ALB load balancer. Required if using ALB.                                                                | no       |
 | alb_security_group_id             | string       | ID del security group del Application Load Balancer. Required if using ALB.                                         | no       |
 | service_discovery                 | object       | Service Discovery configuration for the ECS service. Required if ALB is not configured.                             | no       |
@@ -198,6 +199,7 @@ module "ecs_webapp" {
   task_memory         = "512"
   subnet_ids          = ["subnet-abcdef", "subnet-123456"]
   vpc_id              = "vpc-abcdef123"
+  vpc_cidr_block      = "10.0.0.0/16"
   alb_load_balancer_arn = "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/my-alb/abcdef123456"
   alb_security_group_id = "sg-alb123456"  # ID of the ALB security group
 
@@ -294,6 +296,7 @@ module "ecs_webapp" {
   task_memory         = "512"
   subnet_ids          = ["subnet-abcdef", "subnet-123456"]
   vpc_id              = "vpc-abcdef123"
+  vpc_cidr_block      = "10.0.0.0/16"
   
   # Service Discovery es requerido cuando no hay ALB
   service_discovery = {

@@ -18,11 +18,12 @@ import (
 // InfrastructureOutputs contains outputs from the infrastructure fixtures
 type InfrastructureOutputs struct {
 	VPCID                  string
+	VPCCIDRBlock           string
 	PrivateSubnetIDs       []string
 	PublicSubnetIDs        []string
-	ALBLoadBalancerARN     string   // Optional - empty if ALB is not configured
-	ALBSecurityGroupID     string   // Optional - empty if ALB is not configured
-	ServiceDiscoveryNSID   string   // Optional - namespace ID for service discovery
+	ALBLoadBalancerARN     string // Optional - empty if ALB is not configured
+	ALBSecurityGroupID     string // Optional - empty if ALB is not configured
+	ServiceDiscoveryNSID   string // Optional - namespace ID for service discovery
 	ClusterName            string
 	CloudWatchLogGroupName string
 	AWSRegion              string
@@ -204,6 +205,12 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 		t.Logf("⚠️  Could not read vpc_id output: %v", err)
 	}
 
+	if vpcCIDR, err := terraform.OutputE(t, terraformOptions, "vpc_cidr_block"); err == nil {
+		outputs.VPCCIDRBlock = vpcCIDR
+	} else {
+		t.Logf("⚠️  Could not read vpc_cidr_block output: %v", err)
+	}
+
 	if privateSubnets, err := terraform.OutputListE(t, terraformOptions, "private_subnet_ids"); err == nil {
 		outputs.PrivateSubnetIDs = privateSubnets
 	} else {
@@ -262,6 +269,7 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 	}
 
 	t.Logf("   VPC ID: %s", formatOutput(outputs.VPCID))
+	t.Logf("   VPC CIDR Block: %s", formatOutput(outputs.VPCCIDRBlock))
 	if len(outputs.PrivateSubnetIDs) > 0 {
 		t.Logf("   Private Subnets: %v", outputs.PrivateSubnetIDs)
 	} else {
@@ -292,6 +300,9 @@ func validateInfrastructureOutputs(t *testing.T, outputs *InfrastructureOutputs)
 
 	if outputs.VPCID == "" {
 		missingOutputs = append(missingOutputs, "vpc_id")
+	}
+	if outputs.VPCCIDRBlock == "" {
+		missingOutputs = append(missingOutputs, "vpc_cidr_block")
 	}
 	if len(outputs.PrivateSubnetIDs) == 0 {
 		missingOutputs = append(missingOutputs, "private_subnet_ids")
@@ -420,10 +431,11 @@ func setupModuleOptions(t *testing.T, moduleDir string, outputs *InfrastructureO
 		"docker_image":              dockerImage,
 		"image_tag":                 imageTag,
 		"container_port":           containerPort,
-		"task_cpu":                 "256",
-		"task_memory":              "512",
-		"subnet_ids":               outputs.PrivateSubnetIDs,
-		"vpc_id":                   outputs.VPCID,
+		"task_cpu":                  "256",
+		"task_memory":               "512",
+		"subnet_ids":                outputs.PrivateSubnetIDs,
+		"vpc_id":                    outputs.VPCID,
+		"vpc_cidr_block":            outputs.VPCCIDRBlock,
 		"cloudwatch_log_group_name": outputs.CloudWatchLogGroupName,
 		"secret_variables": []map[string]interface{}{
 			{
