@@ -36,13 +36,13 @@ func testSecurityGroup(t *testing.T, moduleOptions *terraform.Options, infraOutp
 	ingressRules := securityGroup.IpPermissions
 	require.Greater(t, len(ingressRules), 0)
 
-	// Find rule allowing traffic from ALB security group
+	// Find rule allowing traffic from ALB security group (only if ALB is configured)
 	foundALBRule := false
 	foundVPCRule := false
 	for _, rule := range ingressRules {
 		if *rule.IpProtocol == "tcp" && len(rule.UserIdGroupPairs) > 0 {
 			for _, pair := range rule.UserIdGroupPairs {
-				if *pair.GroupId == infraOutputs.ALBSecurityGroupID {
+				if infraOutputs.ALBSecurityGroupID != "" && *pair.GroupId == infraOutputs.ALBSecurityGroupID {
 					foundALBRule = true
 					require.Equal(t, int64(80), *rule.FromPort)
 					require.Equal(t, int64(80), *rule.ToPort)
@@ -58,7 +58,11 @@ func testSecurityGroup(t *testing.T, moduleOptions *terraform.Options, infraOutp
 			}
 		}
 	}
-	require.True(t, foundALBRule, "Security group should allow traffic from ALB security group")
+	if infraOutputs.ALBSecurityGroupID != "" {
+		require.True(t, foundALBRule, "Security group should allow traffic from ALB security group when ALB is configured")
+	} else {
+		t.Logf("   ALB not configured, skipping ALB security group rule check")
+	}
 	require.True(t, foundVPCRule, "Security group should allow traffic from VPC")
 
 	// Verify egress rules (should allow all outbound)

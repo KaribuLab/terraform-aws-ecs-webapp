@@ -8,11 +8,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func testOutputs(t *testing.T, moduleOptions *terraform.Options) {
+func testOutputs(t *testing.T, moduleOptions *terraform.Options, infraOutputs *InfrastructureOutputs) {
 	// Test all outputs exist and have values
 	albTargetGroupARN := terraform.Output(t, moduleOptions, "alb_target_group_arn")
-	require.NotEmpty(t, albTargetGroupARN)
-	require.True(t, strings.HasPrefix(albTargetGroupARN, "arn:aws:elasticloadbalancing"))
+	if infraOutputs.ALBListenerARN != "" {
+		// ALB is configured, verify target group ARN
+		require.NotEmpty(t, albTargetGroupARN, "Target Group ARN should not be empty when ALB is configured")
+		require.True(t, strings.HasPrefix(albTargetGroupARN, "arn:aws:elasticloadbalancing"))
+	} else {
+		// ALB is not configured, target group ARN should be empty/null
+		require.Empty(t, albTargetGroupARN, "Target Group ARN should be empty when ALB is not configured")
+	}
 
 	ecsServiceName := terraform.Output(t, moduleOptions, "ecs_service_name")
 	require.NotEmpty(t, ecsServiceName)

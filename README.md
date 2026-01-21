@@ -15,13 +15,13 @@ Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con ba
 | task_memory                       | string       | Amount of memory for the ECS task (in MiB)                               | yes      |
 | subnet_ids                        | list(string) | IDs of private subnets for ECS tasks. IMPORTANT: Must be private subnets as tasks are configured without public IPs | yes      |
 | vpc_id                            | string       | VPC ID where resources will be created                                   | yes      |
-| alb_listener_arn                  | string       | ARN of the ALB listener (HTTP or HTTPS)                                  | yes      |
-| alb_security_group_id             | string       | ID del security group del Application Load Balancer                      | yes      |
-| service_discovery                 | object       | Service Discovery configuration for the ECS service                      | no       |
+| alb_listener_arn                  | string       | ARN of the ALB listener (HTTP or HTTPS). Required if using ALB.         | no       |
+| alb_security_group_id             | string       | ID del security group del Application Load Balancer. Required if using ALB. | no       |
+| service_discovery                 | object       | Service Discovery configuration for the ECS service. Required if ALB is not configured. | no       |
 | environment_variables             | list(object) | [Environment variables](#environment-variables) to pass to the container | no       |
 | secret_variables                  | list(object) | [Secret variables](#secret-variables) to pass to the container           | no       |
-| health_check                      | object       | [Health check configuration](#health-check)                              | yes      |
-| listener_rules                    | list(object) | [List of listener rules](#listener-rules)                                | no       |
+| health_check                      | object       | [Health check configuration](#health-check). Required if using ALB.     | no       |
+| listener_rules                    | list(object) | [List of listener rules](#listener-rules). Required if using ALB.        | no       |
 | autoscaling_config                | object       | [Auto scaling configuration](#autoscaling-config)                        | yes      |
 | common_tags                       | map(string)  | Common tags to be applied to all resources                               | yes      |
 | task_policy_json                  | string       | IAM Policy document in JSON format for the task role                     | no       |
@@ -93,7 +93,7 @@ Al menos uno de `path_patterns` o `host_headers` debe ser proporcionado.
 | memory           | object | [Memory autoscaling configuration](#memory-autoscaling-configuration)       | no       |
 | alb_request_count| object | [ALB request count autoscaling configuration](#alb-request-count-configuration) | no       |
 
-At least one of `cpu`, `memory`, or `alb_request_count` must be provided. When `min_capacity = 0`, `alb_request_count` is required to enable automatic scaling from 0.
+At least one of `cpu`, `memory`, or `alb_request_count` must be provided. When `min_capacity = 0`, `alb_request_count` is required to enable automatic scaling from 0. **Note:** `alb_request_count` requires ALB to be configured (`alb_listener_arn` must be provided).
 
 #### CPU Autoscaling Configuration
 
@@ -156,7 +156,7 @@ Para habilitar el escalado automático desde 0, **debe proporcionar `alb_request
 
 | Name                    | Type   | Description                                       |
 | ----------------------- | ------ | ------------------------------------------------- |
-| alb_target_group_arn    | string | ARN of the Target Group connected to the ALB      |
+| alb_target_group_arn    | string | ARN of the Target Group connected to the ALB. Null if ALB is not configured. |
 | ecs_service_name        | string | Name of the ECS service                           |
 | ecs_task_definition_arn | string | ARN of the ECS task definition                    |
 | iam_execution_role_arn  | string | ARN of the ECS execution role                     |
@@ -164,11 +164,27 @@ Para habilitar el escalado automático desde 0, **debe proporcionar `alb_request
 | service_name            | string | Name of the ECS service                           |
 | security_group_id       | string | ID of the security group used for the ECS service |
 
+## ALB vs Service Discovery
+
+El módulo soporta dos formas de acceso al servicio ECS:
+
+1. **Application Load Balancer (ALB)**: Para servicios que necesitan ser accesibles desde Internet o requieren balanceo de carga HTTP/HTTPS.
+2. **Service Discovery**: Para servicios que solo necesitan ser accesibles desde dentro de la VPC mediante DNS.
+
+**Requisitos:**
+- Debe proporcionarse **al menos uno** de los dos: `alb_listener_arn` o `service_discovery`.
+- Si se proporciona `alb_listener_arn`, también se requieren `alb_security_group_id`, `health_check`, y al menos una regla en `listener_rules`.
+- Si no se proporciona `alb_listener_arn`, se debe proporcionar `service_discovery`.
+
+**Cuándo usar cada uno:**
+- **Usar ALB**: Servicios web públicos, APIs REST accesibles desde Internet, servicios que requieren SSL/TLS termination, balanceo de carga entre múltiples instancias.
+- **Usar Service Discovery**: Microservicios internos, servicios que solo se comunican dentro de la VPC, servicios que no requieren balanceo de carga HTTP.
+
 ## Ejemplos adicionales
 
 ### Configuraciones comunes
 
-#### Despliegue básico
+#### Despliegue básico con ALB
 ```hcl
 module "ecs_webapp" {
   source = "github.com/your-username/terraform-aws-ecs-webapp"
@@ -264,13 +280,22 @@ module "ecs_webapp" {
 }
 ```
 
-#### Configuración con Service Discovery
+#### Despliegue sin ALB usando Service Discovery
 ```hcl
 module "ecs_webapp" {
   source = "github.com/your-username/terraform-aws-ecs-webapp"
 
-  // ... configuración básica ...
-
+  cluster_name        = "my-cluster"
+  service_name        = "my-webapp"
+  docker_image        = "123456789012.dkr.ecr.us-east-1.amazonaws.com/my-repository"
+  image_tag           = "v1.0.0"
+  container_port      = 80
+  task_cpu            = "256"
+  task_memory         = "512"
+  subnet_ids          = ["subnet-abcdef", "subnet-123456"]
+  vpc_id              = "vpc-abcdef123"
+  
+  # Service Discovery es requerido cuando no hay ALB
   service_discovery = {
     namespace_id = "ns-abc123def456"
     dns = {
@@ -280,9 +305,29 @@ module "ecs_webapp" {
     }
   }
 
-  // ... otras configuraciones ...
+  autoscaling_config = {
+    min_capacity = 1
+    max_capacity = 5
+    cpu = {
+      target_value       = 70
+      scale_in_cooldown  = 300
+      scale_out_cooldown = 60
+    }
+  }
+
+  deployment_config = {
+    maximum_percent         = 200
+    minimum_healthy_percent = 100
+  }
+
+  common_tags = {
+    Project     = "MyProject"
+    Environment = "production"
+  }
 }
 ```
+
+**Nota:** Cuando no se usa ALB, el servicio solo será accesible desde dentro de la VPC mediante el nombre DNS configurado en Service Discovery. El security group permitirá tráfico desde toda la VPC al puerto del contenedor.
 
 #### Configuración con escalado a 0 usando ALB Request Count
 ```hcl
@@ -317,11 +362,24 @@ module "ecs_webapp" {
 
 El módulo ahora siempre crea un security group dedicado para el servicio ECS y configura automáticamente las reglas de ingreso, lo que simplifica la configuración y mejora la seguridad.
 
-El security group permite tráfico únicamente desde el ALB al puerto del contenedor:
+El security group se configura automáticamente según la configuración:
+
+- **Con ALB**: Permite tráfico desde el security group del ALB y desde toda la VPC al puerto del contenedor.
+- **Sin ALB**: Permite tráfico desde toda la VPC al puerto del contenedor.
 
 ```hcl
-# Configuración del security group para permitir tráfico desde el ALB
+# Configuración con ALB
 alb_security_group_id = "sg-alb123456"  # ID del security group del ALB
+
+# O configuración sin ALB (solo Service Discovery)
+service_discovery = {
+  namespace_id = "ns-abc123def456"
+  dns = {
+    name = "api"
+    type = "A"
+    ttl  = 300
+  }
+}
 ```
 
 ## Testing

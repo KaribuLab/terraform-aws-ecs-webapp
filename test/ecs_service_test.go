@@ -83,21 +83,27 @@ func testECSService(t *testing.T, moduleOptions *terraform.Options, infraOutputs
 	t.Logf("   Subnet Count: %d (expected: %d)", actualSubnetCount, expectedSubnetCount)
 	require.Equal(t, expectedSubnetCount, actualSubnetCount)
 
-	// Verify load balancer configuration
-	t.Logf("⚖️  Verifying load balancer configuration...")
-	t.Logf("   Load Balancers count: %d (expected: 1)", len(ecsService.LoadBalancers))
-	require.Len(t, ecsService.LoadBalancers, 1)
-	loadBalancer := ecsService.LoadBalancers[0]
+	// Verify load balancer configuration (only if ALB is configured)
+	if infraOutputs.ALBListenerARN != "" {
+		t.Logf("⚖️  Verifying load balancer configuration...")
+		t.Logf("   Load Balancers count: %d (expected: 1)", len(ecsService.LoadBalancers))
+		require.Len(t, ecsService.LoadBalancers, 1, "Service should have exactly one load balancer when ALB is configured")
+		loadBalancer := ecsService.LoadBalancers[0]
 
-	if loadBalancer.TargetGroupArn != nil {
-		t.Logf("   Target Group ARN: %s", *loadBalancer.TargetGroupArn)
+		if loadBalancer.TargetGroupArn != nil {
+			t.Logf("   Target Group ARN: %s", *loadBalancer.TargetGroupArn)
+		} else {
+			t.Logf("   ❌ Target Group ARN is nil!")
+		}
+		require.NotNil(t, loadBalancer.TargetGroupArn)
+
+		t.Logf("   Container Name: %s (expected: %s)", *loadBalancer.ContainerName, serviceName)
+		require.Equal(t, serviceName, *loadBalancer.ContainerName)
 	} else {
-		t.Logf("   ❌ Target Group ARN is nil!")
+		t.Logf("⚖️  Verifying load balancer configuration (ALB not configured)...")
+		t.Logf("   Load Balancers count: %d (expected: 0)", len(ecsService.LoadBalancers))
+		require.Len(t, ecsService.LoadBalancers, 0, "Service should not have load balancer when ALB is not configured")
 	}
-	require.NotNil(t, loadBalancer.TargetGroupArn)
-
-	t.Logf("   Container Name: %s (expected: %s)", *loadBalancer.ContainerName, serviceName)
-	require.Equal(t, serviceName, *loadBalancer.ContainerName)
 
 	// Get task definition
 	t.Logf("📦 Getting task definition...")

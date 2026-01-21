@@ -20,8 +20,9 @@ type InfrastructureOutputs struct {
 	VPCID                  string
 	PrivateSubnetIDs       []string
 	PublicSubnetIDs        []string
-	ALBListenerARN         string
-	ALBSecurityGroupID     string
+	ALBListenerARN         string   // Optional - empty if ALB is not configured
+	ALBSecurityGroupID     string   // Optional - empty if ALB is not configured
+	ServiceDiscoveryNSID   string   // Optional - namespace ID for service discovery
 	ClusterName            string
 	CloudWatchLogGroupName string
 	AWSRegion              string
@@ -285,12 +286,8 @@ func validateInfrastructureOutputs(t *testing.T, outputs *InfrastructureOutputs)
 	if len(outputs.PrivateSubnetIDs) == 0 {
 		missingOutputs = append(missingOutputs, "private_subnet_ids")
 	}
-	if outputs.ALBListenerARN == "" {
-		missingOutputs = append(missingOutputs, "alb_listener_arn")
-	}
-	if outputs.ALBSecurityGroupID == "" {
-		missingOutputs = append(missingOutputs, "alb_security_group_id")
-	}
+	// ALB outputs are optional - only validate if they're being used
+	// (This will be determined by the test configuration)
 	if outputs.ClusterName == "" {
 		missingOutputs = append(missingOutputs, "cluster_name")
 	}
@@ -388,59 +385,81 @@ func setupModuleOptions(t *testing.T, moduleDir string, outputs *InfrastructureO
 		containerPort = 80
 	}
 
+	vars := map[string]interface{}{
+		"cluster_name":              outputs.ClusterName,
+		"service_name":              fmt.Sprintf("%s-service", testName),
+		"docker_image":              dockerImage,
+		"image_tag":                 imageTag,
+		"container_port":           containerPort,
+		"task_cpu":                 "256",
+		"task_memory":              "512",
+		"subnet_ids":               outputs.PrivateSubnetIDs,
+		"vpc_id":                   outputs.VPCID,
+		"cloudwatch_log_group_name": outputs.CloudWatchLogGroupName,
+		"secret_variables": []map[string]interface{}{
+			{
+				"name":      "TEST_SECRET",
+				"valueFrom": outputs.TestSecretARN,
+			},
+			{
+				"name":      "API_KEY",
+				"valueFrom": outputs.APIKeyARN,
+			},
+		},
+		"autoscaling_config": map[string]interface{}{
+			"min_capacity": 1,
+			"max_capacity": 2,
+			"cpu": map[string]interface{}{
+				"target_value":       50,
+				"scale_in_cooldown":  60,
+				"scale_out_cooldown": 60,
+			},
+		},
+		"deployment_config": map[string]interface{}{
+			"maximum_percent":         200,
+			"minimum_healthy_percent": 100,
+		},
+		"common_tags": map[string]interface{}{
+			"Project":     "terratest",
+			"Environment": "test",
+			"TestName":    testName,
+		},
+	}
+
+	// Add ALB-related variables only if ALB is configured
+	if outputs.ALBListenerARN != "" && outputs.ALBSecurityGroupID != "" {
+		vars["alb_listener_arn"] = outputs.ALBListenerARN
+		vars["alb_security_group_id"] = outputs.ALBSecurityGroupID
+		vars["health_check"] = map[string]interface{}{
+			"path":                "/",
+			"interval":            30,
+			"timeout":             5,
+			"healthy_threshold":   2,
+			"unhealthy_threshold": 2,
+			"matcher":             "200-399",
+		}
+		vars["listener_rules"] = []map[string]interface{}{
+			{
+				"priority":      100,
+				"path_patterns": []string{"/*"},
+			},
+		}
+	} else if outputs.ServiceDiscoveryNSID != "" {
+		// When ALB is not configured, service_discovery is required
+		vars["service_discovery"] = map[string]interface{}{
+			"namespace_id": outputs.ServiceDiscoveryNSID,
+			"dns": map[string]interface{}{
+				"name": fmt.Sprintf("%s-service", testName),
+				"type": "A",
+				"ttl":  60,
+			},
+		}
+	}
+
 	return &terraform.Options{
 		TerraformDir:    moduleDir,
 		TerraformBinary: "terraform",
-		Vars: map[string]interface{}{
-			"cluster_name":              outputs.ClusterName,
-			"service_name":              fmt.Sprintf("%s-service", testName),
-			"docker_image":              dockerImage,
-			"image_tag":                 imageTag,
-			"container_port":            containerPort,
-			"task_cpu":                  "256",
-			"task_memory":               "512",
-			"subnet_ids":                outputs.PrivateSubnetIDs,
-			"vpc_id":                    outputs.VPCID,
-			"alb_listener_arn":          outputs.ALBListenerARN,
-			"alb_security_group_id":     outputs.ALBSecurityGroupID,
-			"cloudwatch_log_group_name": outputs.CloudWatchLogGroupName,
-			"secret_variables": []map[string]interface{}{
-				{
-					"name":      "TEST_SECRET",
-					"valueFrom": outputs.TestSecretARN,
-				},
-				{
-					"name":      "API_KEY",
-					"valueFrom": outputs.APIKeyARN,
-				},
-			},
-			"health_check": map[string]interface{}{
-				"path":                "/",
-				"interval":            30,
-				"timeout":             5,
-				"healthy_threshold":   2,
-				"unhealthy_threshold": 2,
-				"matcher":             "200-399",
-			},
-			"autoscaling_config": map[string]interface{}{
-				"min_capacity": 1,
-				"max_capacity": 2,
-				"cpu": map[string]interface{}{
-					"target_value":       50,
-					"scale_in_cooldown":  60,
-					"scale_out_cooldown": 60,
-				},
-			},
-			"deployment_config": map[string]interface{}{
-				"maximum_percent":         200,
-				"minimum_healthy_percent": 100,
-			},
-			"common_tags": map[string]interface{}{
-				"Project":     "terratest",
-				"Environment": "test",
-				"TestName":    testName,
-			},
-		},
+		Vars:            vars,
 		NoColor:            true,
 		MaxRetries:         3,
 		TimeBetweenRetries: 5 * time.Second,

@@ -40,3 +40,4 @@ test/terraform.tfstate*
 test/fixtures/.terraform/
 test/fixtures/terraform.tfstate*
 test/fixtures/.terraform.lock.hcl
+backend.tf

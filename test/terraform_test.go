@@ -69,7 +69,7 @@ func TestTerraformModule(t *testing.T) {
 	})
 
 	t.Run("Outputs", func(t *testing.T) {
-		testOutputs(t, moduleOptions)
+		testOutputs(t, moduleOptions, infraOutputs)
 	})
 }
 

@@ -39,13 +39,35 @@ variable "vpc_id" {
 }
 
 variable "alb_listener_arn" {
-  description = "ARN of the ALB listener (HTTP or HTTPS)"
+  description = "ARN of the ALB listener (HTTP or HTTPS). Required if using ALB."
   type        = string
+  default     = null
+
+  validation {
+    condition     = var.alb_listener_arn == null || var.alb_security_group_id != null
+    error_message = "alb_security_group_id must be provided when alb_listener_arn is provided"
+  }
+
+  validation {
+    condition     = var.alb_listener_arn == null || var.health_check != null
+    error_message = "health_check must be provided when alb_listener_arn is provided"
+  }
+
+  validation {
+    condition     = var.alb_listener_arn == null || length(var.listener_rules) > 0
+    error_message = "At least one listener_rule must be provided when alb_listener_arn is provided"
+  }
+
+  validation {
+    condition     = var.alb_listener_arn != null || var.service_discovery != null
+    error_message = "Either alb_listener_arn or service_discovery must be provided for service access"
+  }
 }
 
 variable "alb_security_group_id" {
-  description = "ID del security group del Application Load Balancer"
+  description = "ID del security group del Application Load Balancer. Required if using ALB."
   type        = string
+  default     = null
 }
 
 variable "service_discovery" {
@@ -92,22 +114,13 @@ variable "health_check" {
 }
 
 variable "listener_rules" {
-  description = "List of listener rules"
+  description = "List of listener rules. Required if using ALB."
   type = list(object({
     priority      = number
     path_patterns = optional(list(string))
     host_headers  = optional(list(string))
   }))
-  default = [
-    {
-      priority      = 100
-      path_patterns = ["/*"]
-    }
-  ]
-  validation {
-    condition     = var.listener_rules[0].path_patterns != null || var.listener_rules[0].host_headers != null
-    error_message = "At least one of path_patterns or host_headers must be provided"
-  }
+  default = []
 }
 
 variable "autoscaling_config" {
@@ -116,10 +129,10 @@ variable "autoscaling_config" {
     
     IMPORTANT: When min_capacity = 0:
     - The service can scale to zero tasks, but this has implications:
-      * The ALB Target Group will have no healthy targets, causing 503 errors for incoming requests
+      * The ALB Target Group will have no healthy targets, causing 503 errors for incoming requests (if ALB is configured)
       * CPU/Memory metrics won't be available when there are 0 tasks, so autoscaling policies based on these metrics cannot automatically scale up from 0
-      * You must provide alb_request_count to enable automatic scaling from 0 based on ALB request metrics
-    - Consider using min_capacity = 1 for production workloads with ALB to ensure availability
+      * You must provide alb_request_count to enable automatic scaling from 0 based on ALB request metrics (requires ALB)
+    - Consider using min_capacity = 1 for production workloads to ensure availability
     - All policies (CPU, Memory, and ALB) can coexist. AWS Application Auto Scaling will use the policy that requires the highest capacity.
   EOT
   type = object({
@@ -154,8 +167,12 @@ variable "autoscaling_config" {
     error_message = "At least one of alb_request_count, memory, or cpu must be provided"
   }
   validation {
-    condition     = var.autoscaling_config.min_capacity > 0 || var.autoscaling_config.alb_request_count != null
-    error_message = "When min_capacity = 0, alb_request_count must be provided to enable automatic scaling from 0"
+    condition     = var.autoscaling_config.min_capacity > 0 || var.autoscaling_config.alb_request_count != null || var.autoscaling_config.cpu != null || var.autoscaling_config.memory != null
+    error_message = "When min_capacity = 0, at least one autoscaling policy (cpu, memory, or alb_request_count) must be provided. Note: alb_request_count requires ALB."
+  }
+  validation {
+    condition     = var.autoscaling_config.alb_request_count == null || var.alb_listener_arn != null
+    error_message = "alb_request_count autoscaling cannot be used without ALB (alb_listener_arn)"
   }
 }
 

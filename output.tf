@@ -1,6 +1,6 @@
 output "alb_target_group_arn" {
-  description = "ARN of the Target Group connected to the ALB"
-  value       = aws_lb_target_group.webapp.arn
+  description = "ARN of the Target Group connected to the ALB. Null if ALB is not configured."
+  value       = var.alb_listener_arn != null ? aws_lb_target_group.webapp[0].arn : null
 }
 
 output "ecs_service_name" {

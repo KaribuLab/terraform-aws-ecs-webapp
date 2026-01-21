@@ -71,10 +71,13 @@ resource "aws_ecs_service" "webapp" {
     }
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.webapp.arn
-    container_name   = var.service_name
-    container_port   = var.container_port
+  dynamic "load_balancer" {
+    for_each = var.alb_listener_arn != null ? [1] : []
+    content {
+      target_group_arn = aws_lb_target_group.webapp[0].arn
+      container_name   = var.service_name
+      container_port   = var.container_port
+    }
   }
 
   deployment_controller {
@@ -90,12 +93,14 @@ resource "aws_ecs_service" "webapp" {
     rollback = var.enable_deployment_circuit_breaker
   }
 
-  depends_on = [aws_lb_listener_rule.webapp]
+  depends_on = var.alb_listener_arn != null ? [aws_lb_listener_rule.webapp] : []
 
   tags = var.common_tags
 }
 
 resource "aws_lb_target_group" "webapp" {
+  count = var.alb_listener_arn != null ? 1 : 0
+
   name                 = "${var.service_name}-tg"
   port                 = var.container_port
   protocol             = "HTTP"
@@ -116,16 +121,16 @@ resource "aws_lb_target_group" "webapp" {
 }
 
 resource "aws_lb_listener_rule" "webapp" {
-  for_each = {
+  for_each = var.alb_listener_arn != null ? {
     for rule in var.listener_rules : "rule-${rule.priority}" => rule
-  }
+  } : {}
 
   listener_arn = var.alb_listener_arn
   priority     = each.value.priority
 
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.webapp.arn
+    target_group_arn = aws_lb_target_group.webapp[0].arn
   }
 
   condition {
@@ -251,7 +256,7 @@ resource "aws_appautoscaling_policy" "memory" {
 }
 
 resource "aws_appautoscaling_policy" "alb_request_count" {
-  count              = var.autoscaling_config.alb_request_count != null ? 1 : 0
+  count              = var.autoscaling_config.alb_request_count != null && var.alb_listener_arn != null ? 1 : 0
   name               = "alb-request-count-scaling-policy-${var.service_name}"
   policy_type        = "TargetTrackingScaling"
   resource_id        = aws_appautoscaling_target.ecs.resource_id
@@ -261,7 +266,7 @@ resource "aws_appautoscaling_policy" "alb_request_count" {
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification {
       predefined_metric_type = "ALBRequestCountPerTarget"
-      resource_label          = "app/${data.aws_lb.webapp.name}/${split("/", split(":", data.aws_lb.webapp.arn)[5])[3]}/targetgroup/${aws_lb_target_group.webapp.name}/${split("/", split(":", aws_lb_target_group.webapp.arn)[5])[2]}"
+      resource_label          = "app/${data.aws_lb.webapp[0].name}/${split("/", split(":", data.aws_lb.webapp[0].arn)[5])[3]}/targetgroup/${aws_lb_target_group.webapp[0].name}/${split("/", split(":", aws_lb_target_group.webapp[0].arn)[5])[2]}"
     }
     target_value       = var.autoscaling_config.alb_request_count.target_value
     scale_in_cooldown  = var.autoscaling_config.alb_request_count.scale_in_cooldown
@@ -275,12 +280,14 @@ data "aws_region" "current" {}
 
 # Get ALB listener to extract ALB information
 data "aws_lb_listener" "webapp" {
-  arn = var.alb_listener_arn
+  count = var.alb_listener_arn != null ? 1 : 0
+  arn   = var.alb_listener_arn
 }
 
 # Get ALB information
 data "aws_lb" "webapp" {
-  arn = data.aws_lb_listener.webapp.load_balancer_arn
+  count = var.alb_listener_arn != null ? 1 : 0
+  arn   = data.aws_lb_listener.webapp[0].load_balancer_arn
 }
 
 # Security Group for ECS Service
@@ -304,6 +311,8 @@ resource "aws_security_group" "ecs_service" {
 
 # Security Group Rules for ECS Service
 resource "aws_security_group_rule" "webapp" {
+  count = var.alb_listener_arn != null ? 1 : 0
+
   type                     = "ingress"
   from_port                = var.container_port
   to_port                  = var.container_port
