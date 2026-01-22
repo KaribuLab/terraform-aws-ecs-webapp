@@ -203,7 +203,6 @@ variable "enable_deployment_circuit_breaker" {
 variable "cloudwatch_log_group_name" {
   description = "Full name of the CloudWatch Log Group to use (e.g. /ecs/service-name)"
   type        = string
-  default     = null
 }
 
 variable "image_tag" {

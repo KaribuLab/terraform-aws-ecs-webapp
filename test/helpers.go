@@ -468,6 +468,14 @@ func setupModuleOptions(t *testing.T, moduleDir string, outputs *InfrastructureO
 			"maximum_percent":         200,
 			"minimum_healthy_percent": 100,
 		},
+		"health_check": map[string]interface{}{
+			"path":                "/",
+			"interval":            30,
+			"timeout":             5,
+			"healthy_threshold":   2,
+			"unhealthy_threshold": 2,
+			"matcher":             "200-399",
+		},
 		"common_tags": map[string]interface{}{
 			"Project":     "terratest",
 			"Environment": "test",
@@ -480,14 +488,6 @@ func setupModuleOptions(t *testing.T, moduleDir string, outputs *InfrastructureO
 		vars["alb_load_balancer_arn"] = outputs.ALBLoadBalancerARN
 		vars["alb_listener_arn"] = outputs.ALBListenerARN
 		vars["alb_security_group_id"] = outputs.ALBSecurityGroupID
-		vars["health_check"] = map[string]interface{}{
-			"path":                "/",
-			"interval":            30,
-			"timeout":             5,
-			"healthy_threshold":   2,
-			"unhealthy_threshold": 2,
-			"matcher":             "200-399",
-		}
 		vars["listener_rules"] = []map[string]interface{}{
 			{
 				"priority":      100,

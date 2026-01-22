@@ -22,7 +22,7 @@ Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con ba
 | service_discovery                 | object       | Service Discovery configuration for the ECS service. Required if ALB is not configured.                             | no       |
 | environment_variables             | list(object) | [Environment variables](#environment-variables) to pass to the container                                            | no       |
 | secret_variables                  | list(object) | [Secret variables](#secret-variables) to pass to the container                                                      | no       |
-| health_check                      | object       | [Health check configuration](#health-check). Required if using ALB.                                                 | no       |
+| health_check                      | object       | [Health check configuration](#health-check)                                                                         | yes      |
 | listener_rules                    | list(object) | [List of listener rules](#listener-rules). Required if using ALB.                                                   | no       |
 | autoscaling_config                | object       | [Auto scaling configuration](#autoscaling-config)                                                                   | yes      |
 | common_tags                       | map(string)  | Common tags to be applied to all resources                                                                          | yes      |
@@ -31,7 +31,7 @@ Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con ba
 | force_new_deployment              | bool         | Force a new deployment of the service                                                                               | no       |
 | deployment_config                 | object       | [Deployment configuration](#deployment-config)                                                                      | yes      |
 | enable_deployment_circuit_breaker | bool         | Enable deployment circuit breaker with rollback                                                                     | no       |
-| cloudwatch_log_group_name         | string       | Full name of the CloudWatch Log Group to use (e.g. /ecs/service-name)                                               | no       |
+| cloudwatch_log_group_name         | string       | Full name of the CloudWatch Log Group to use (e.g. /ecs/service-name)                                               | yes      |
 
 ### Environment Variables
 
@@ -201,6 +201,7 @@ module "ecs_webapp" {
   subnet_ids          = ["subnet-abcdef", "subnet-123456"]
   vpc_id              = "vpc-abcdef123"
   vpc_cidr_block      = "10.0.0.0/16"
+  cloudwatch_log_group_name = "/ecs/my-webapp"
   alb_load_balancer_arn = "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/my-alb/abcdef123456"
   alb_listener_arn      = "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/app/my-alb/abcdef123456/1234567890abcdef"
   alb_security_group_id = "sg-alb123456"  # ID of the ALB security group
@@ -299,6 +300,7 @@ module "ecs_webapp" {
   subnet_ids          = ["subnet-abcdef", "subnet-123456"]
   vpc_id              = "vpc-abcdef123"
   vpc_cidr_block      = "10.0.0.0/16"
+  cloudwatch_log_group_name = "/ecs/my-webapp"
   
   # Service Discovery es requerido cuando no hay ALB
   service_discovery = {
@@ -308,6 +310,15 @@ module "ecs_webapp" {
       type = "A"
       ttl  = 300
     }
+  }
+
+  health_check = {
+    path                = "/"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    matcher             = "200-399"
   }
 
   autoscaling_config = {
