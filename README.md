@@ -10,6 +10,7 @@ Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con ba
 | service_name                      | string       | Name of the ECS service                                                                                             | yes      |
 | docker_image                      | string       | Docker image in ECR                                                                                                 | yes      |
 | image_tag                         | string       | Image tag (default: "latest")                                                                                       | no       |
+| container_command                 | list(string) | Command to override the default CMD from the Dockerfile. If null, uses the default CMD from the image.              | no       |
 | container_port                    | number       | Port exposed by the container                                                                                       | yes      |
 | task_cpu                          | string       | Amount of CPU for the ECS task (in CPU units)                                                                       | yes      |
 | task_memory                       | string       | Amount of memory for the ECS task (in MiB)                                                                          | yes      |
@@ -547,6 +548,47 @@ CONTAINER_PORT=3000
 ```
 
 The module will combine the Docker image repository and tag (`DOCKER_IMAGE:IMAGE_TAG`) and configure the target group to forward traffic to port 3000.
+
+### Container Command Override
+
+El módulo permite sobrescribir el comando por defecto (CMD) especificado en el Dockerfile usando la variable `container_command`. Esto es útil cuando necesitas reutilizar la misma imagen de Docker con diferentes comandos de inicio.
+
+**Ejemplo: Usar el comando por defecto del Dockerfile**
+```hcl
+module "ecs_webapp" {
+  source = "github.com/your-username/terraform-aws-ecs-webapp"
+  
+  # ... otras configuraciones ...
+  
+  # No especificar container_command (o establecerlo en null)
+  # Usará el CMD definido en el Dockerfile
+}
+```
+
+**Ejemplo: Sobrescribir el comando para ejecutar un worker**
+```hcl
+module "ecs_webapp" {
+  source = "github.com/your-username/terraform-aws-ecs-webapp"
+  
+  # ... otras configuraciones ...
+  
+  # Sobrescribir el comando del contenedor
+  container_command = ["python", "worker.py", "--mode", "async"]
+}
+```
+
+**Ejemplo: Ejecutar un script de migración**
+```hcl
+module "ecs_webapp" {
+  source = "github.com/your-username/terraform-aws-ecs-webapp"
+  
+  # ... otras configuraciones ...
+  
+  container_command = ["python", "manage.py", "migrate"]
+}
+```
+
+**Nota:** Si `container_command` es `null` o no se especifica, ECS usará el comando por defecto (CMD) definido en el Dockerfile de la imagen.
 
 ### Network Configuration
 

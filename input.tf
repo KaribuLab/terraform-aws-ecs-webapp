@@ -211,4 +211,10 @@ variable "image_tag" {
   default     = "latest"
 }
 
+variable "container_command" {
+  description = "Command to override the default CMD from the Dockerfile. If null, uses the default CMD from the image."
+  type        = list(string)
+  default     = null
+}
+
 

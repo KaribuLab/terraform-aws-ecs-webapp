@@ -12,6 +12,7 @@ resource "aws_ecs_task_definition" "webapp" {
       name      = var.service_name,
       image     = "${var.docker_image}:${var.image_tag}",
       essential = true,
+      command   = var.container_command,
       portMappings = [
         {
           containerPort = var.container_port,
