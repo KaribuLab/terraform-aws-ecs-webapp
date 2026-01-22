@@ -49,6 +49,12 @@ variable "alb_load_balancer_arn" {
   default     = null
 }
 
+variable "alb_listener_arn" {
+  description = "ARN of the ALB listener (HTTP or HTTPS). Required if using ALB."
+  type        = string
+  default     = null
+}
+
 variable "alb_security_group_id" {
   description = "ID del security group del Application Load Balancer. Required if using ALB."
   type        = string

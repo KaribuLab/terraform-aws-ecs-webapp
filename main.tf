@@ -127,7 +127,7 @@ resource "aws_lb_listener_rule" "webapp" {
     for rule in var.listener_rules : "rule-${rule.priority}" => rule
   } : {}
 
-  listener_arn = var.alb_load_balancer_arn
+  listener_arn = var.alb_listener_arn != null ? var.alb_listener_arn : var.alb_load_balancer_arn
   priority     = each.value.priority
 
   action {

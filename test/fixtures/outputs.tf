@@ -23,6 +23,11 @@ output "alb_load_balancer_arn" {
   value       = aws_lb.main.arn
 }
 
+output "alb_listener_arn" {
+  description = "ARN of the ALB listener"
+  value       = aws_lb_listener.main.arn
+}
+
 output "alb_security_group_id" {
   description = "ID of the ALB security group"
   value       = aws_security_group.alb.id

@@ -17,6 +17,7 @@ Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con ba
 | vpc_id                            | string       | VPC ID where resources will be created                                                                              | yes      |
 | vpc_cidr_block                    | string       | CIDR block of the VPC (used for security group rules)                                                               | yes      |
 | alb_load_balancer_arn             | string       | ARN of the ALB load balancer. Required if using ALB.                                                                | no       |
+| alb_listener_arn                  | string       | ARN of the ALB listener (HTTP or HTTPS). Required if using ALB.                                                     | no       |
 | alb_security_group_id             | string       | ID del security group del Application Load Balancer. Required if using ALB.                                         | no       |
 | service_discovery                 | object       | Service Discovery configuration for the ECS service. Required if ALB is not configured.                             | no       |
 | environment_variables             | list(object) | [Environment variables](#environment-variables) to pass to the container                                            | no       |
@@ -174,7 +175,7 @@ El módulo soporta dos formas de acceso al servicio ECS:
 
 **Requisitos:**
 - Debe proporcionarse **al menos uno** de los dos: `alb_load_balancer_arn` o `service_discovery`.
-- Si se proporciona `alb_load_balancer_arn`, también se requieren `alb_security_group_id`, `health_check`, y al menos una regla en `listener_rules`.
+- Si se proporciona `alb_load_balancer_arn`, también se requieren `alb_listener_arn`, `alb_security_group_id`, `health_check`, y al menos una regla en `listener_rules`.
 - Si no se proporciona `alb_load_balancer_arn`, se debe proporcionar `service_discovery`.
 
 **Cuándo usar cada uno:**
@@ -201,6 +202,7 @@ module "ecs_webapp" {
   vpc_id              = "vpc-abcdef123"
   vpc_cidr_block      = "10.0.0.0/16"
   alb_load_balancer_arn = "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/my-alb/abcdef123456"
+  alb_listener_arn      = "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/app/my-alb/abcdef123456/1234567890abcdef"
   alb_security_group_id = "sg-alb123456"  # ID of the ALB security group
 
   health_check = {

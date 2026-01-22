@@ -27,5 +27,10 @@ resource "terraform_data" "validation" {
       condition     = var.autoscaling_config.alb_request_count == null || var.alb_load_balancer_arn != null
       error_message = "alb_request_count autoscaling cannot be used without ALB (alb_load_balancer_arn)"
     }
+
+    precondition {
+      condition     = var.alb_listener_arn == null || var.alb_load_balancer_arn != null
+      error_message = "alb_listener_arn must be provided when alb_load_balancer_arn is provided"
+    }
   }
 }
