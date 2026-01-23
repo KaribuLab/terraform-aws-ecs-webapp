@@ -180,6 +180,47 @@ resource "aws_iam_role_policy_attachment" "execution_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Política inline para permisos de lectura de secretos (SSM y Secrets Manager)
+# Solo se crea cuando se proporcionan secret_variables
+resource "aws_iam_role_policy" "execution_secrets_policy" {
+  count = length(var.secret_variables) > 0 ? 1 : 0
+
+  name = "${var.service_name}-execution-secrets-policy"
+  role = aws_iam_role.execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      # Statement para SSM Parameter Store
+      length([for s in var.secret_variables : s if can(regex("^arn:aws:ssm:", s.valueFrom))]) > 0 ? [
+        {
+          Effect = "Allow"
+          Action = [
+            "ssm:GetParameters"
+          ]
+          Resource = [
+            for secret in var.secret_variables : secret.valueFrom
+            if can(regex("^arn:aws:ssm:", secret.valueFrom))
+          ]
+        }
+      ] : [],
+      # Statement para Secrets Manager
+      length([for s in var.secret_variables : s if can(regex("^arn:aws:secretsmanager:", s.valueFrom))]) > 0 ? [
+        {
+          Effect = "Allow"
+          Action = [
+            "secretsmanager:GetSecretValue"
+          ]
+          Resource = [
+            for secret in var.secret_variables : secret.valueFrom
+            if can(regex("^arn:aws:secretsmanager:", secret.valueFrom))
+          ]
+        }
+      ] : []
+    )
+  })
+}
+
 # Rol de tarea específico que se crea solo si se proporciona una política JSON
 resource "aws_iam_role" "task" {
   count = var.task_policy_json != null ? 1 : 0

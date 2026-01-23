@@ -48,7 +48,27 @@ Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con ba
 | name      | string | Name of the secret variable (environment variable name in the container) | yes      |
 | valueFrom | string | ARN of the secret in AWS Secrets Manager or SSM Parameter Store          | yes      |
 
-**Note**: Secret variables must reference secrets stored in AWS Secrets Manager or Systems Manager Parameter Store using their ARNs. The `valueFrom` field should contain the full ARN of the secret (e.g., `arn:aws:ssm:region:account-id:parameter/parameter-name`).
+**Permisos automáticos**: Cuando se proporcionan `secret_variables`, el módulo crea automáticamente una política IAM inline en el Execution Role con permisos para leer los secretos especificados. Esta política sigue el principio de menor privilegio, otorgando acceso únicamente a los ARNs listados en `secret_variables`. La política crea statements separados para SSM Parameter Store y Secrets Manager, cada uno con los permisos específicos necesarios.
+
+**Formatos de ARN soportados**:
+- SSM Parameter Store: `arn:aws:ssm:region:account-id:parameter/parameter-name`
+- Secrets Manager: `arn:aws:secretsmanager:region:account-id:secret:secret-name-xxxxx`
+
+**Ejemplo**:
+```hcl
+secret_variables = [
+  {
+    name      = "DATABASE_PASSWORD"
+    valueFrom = "arn:aws:secretsmanager:us-east-1:123456789012:secret:db-password-abc123"
+  },
+  {
+    name      = "API_KEY"
+    valueFrom = "arn:aws:ssm:us-east-1:123456789012:parameter/myapp/api-key"
+  }
+]
+```
+
+**Nota sobre KMS**: Si los secretos están encriptados con una KMS key personalizada (no la default de AWS), deberás proporcionar permisos adicionales de KMS mediante la variable `task_policy_json` o configurando la KMS key para permitir el acceso desde el Execution Role.
 
 ### Service Discovery Configuration
 

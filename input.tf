@@ -90,6 +90,14 @@ variable "secret_variables" {
     valueFrom = string
   }))
   default = []
+  
+  validation {
+    condition = alltrue([
+      for secret in var.secret_variables :
+      can(regex("^arn:aws:(secretsmanager|ssm):", secret.valueFrom))
+    ])
+    error_message = "All secret_variables.valueFrom must be valid ARNs starting with 'arn:aws:secretsmanager:' or 'arn:aws:ssm:'"
+  }
 }
 
 variable "health_check" {

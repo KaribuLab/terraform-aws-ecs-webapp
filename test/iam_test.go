@@ -52,4 +52,43 @@ func testIAM(t *testing.T, moduleOptions *terraform.Options, infraOutputs *Infra
 		}
 	}
 	require.True(t, found, "AmazonECSTaskExecutionRolePolicy should be attached to execution role")
+
+	// Get inline policies
+	inlinePolicies, err := iamClient.ListRolePolicies(&iam.ListRolePoliciesInput{
+		RoleName: aws.String(roleName),
+	})
+	require.NoError(t, err)
+
+	// Find the secrets policy
+	var secretsPolicyName string
+	for _, policyName := range inlinePolicies.PolicyNames {
+		if strings.Contains(*policyName, "execution-secrets-policy") {
+			secretsPolicyName = *policyName
+			break
+		}
+	}
+	require.NotEmpty(t, secretsPolicyName, "Secrets policy should exist when secret_variables are provided")
+
+	// Get policy document
+	policyDoc, err := iamClient.GetRolePolicy(&iam.GetRolePolicyInput{
+		RoleName:   aws.String(roleName),
+		PolicyName: aws.String(secretsPolicyName),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, policyDoc.PolicyDocument)
+
+	// Verify policy contains required actions
+	require.Contains(t, *policyDoc.PolicyDocument, "secretsmanager:GetSecretValue", "Policy should contain Secrets Manager permissions")
+	require.Contains(t, *policyDoc.PolicyDocument, "ssm:GetParameters", "Policy should contain SSM Parameter Store permissions")
+
+	// Verify policy contains the test secret ARNs
+	require.Contains(t, *policyDoc.PolicyDocument, infraOutputs.TestSecretARN, "Policy should contain TestSecret ARN")
+	require.Contains(t, *policyDoc.PolicyDocument, infraOutputs.APIKeyARN, "Policy should contain APIKey ARN")
+
+	t.Logf("✅ Secrets policy verified successfully")
+	t.Logf("   Policy name: %s", secretsPolicyName)
+	t.Logf("   Contains SSM permissions: ✓")
+	t.Logf("   Contains Secrets Manager permissions: ✓")
+	t.Logf("   Contains TestSecret ARN: ✓")
+	t.Logf("   Contains APIKey ARN: ✓")
 }
