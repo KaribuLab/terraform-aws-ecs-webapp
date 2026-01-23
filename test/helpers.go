@@ -368,6 +368,10 @@ func teardownInfrastructure(t *testing.T, terraformOptions *terraform.Options) {
 		return
 	}
 
+	// CRITICAL: Always run destroy, even if there were errors during apply
+	// This ensures resources are cleaned up and don't become orphaned
+	t.Logf("⚠️  IMPORTANT: Running destroy to ensure all resources are cleaned up")
+	
 	// Use DestroyE to handle errors gracefully
 	// This allows cleanup to continue even if there are issues
 	_, err := terraform.DestroyE(t, terraformOptions)
@@ -388,6 +392,7 @@ func teardownInfrastructure(t *testing.T, terraformOptions *terraform.Options) {
 		} else {
 			t.Logf("⚠️  Warning: Error during infrastructure teardown: %v", err)
 			t.Logf("   Resources may need manual cleanup")
+			t.Logf("   Run: cd test && ./cleanup-orphaned-resources.sh")
 			if bucket, ok := terraformOptions.BackendConfig["bucket"].(string); ok {
 				t.Logf("   State bucket: %s", bucket)
 			}

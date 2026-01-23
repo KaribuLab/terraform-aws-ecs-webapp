@@ -39,12 +39,31 @@ jobs:
         run: |
           go mod download
 
+      # Cleanup any orphaned resources from previous failed test runs
+      # This ensures a clean state before running tests
+      - name: Cleanup orphaned resources (pre-test)
+        run: |
+          cd test
+          chmod +x cleanup-orphaned-resources.sh
+          ./cleanup-orphaned-resources.sh ${{ env.AWS_DEFAULT_REGION }}
+        continue-on-error: true
+
       - name: Run Terratest
+        id: terratest
         run: |
           cd test
           go test -v -timeout 60m
         env:
           AWS_DEFAULT_REGION: ${{ env.AWS_DEFAULT_REGION }}
+
+      # Always cleanup resources after tests, even if tests fail
+      # This prevents orphaned resources from accumulating
+      - name: Cleanup orphaned resources (post-test)
+        if: always()
+        run: |
+          cd test
+          ./cleanup-orphaned-resources.sh ${{ env.AWS_DEFAULT_REGION }}
+        continue-on-error: true
 
   check_tag:
     needs: test

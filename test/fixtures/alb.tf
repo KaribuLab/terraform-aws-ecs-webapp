@@ -44,10 +44,10 @@ resource "aws_lb" "main" {
 
 # Default Target Group (required for listener)
 resource "aws_lb_target_group" "default" {
-  name     = "terratest-fixtures-default-tg"
-  port     = 80
-  protocol = "HTTP"
-  vpc_id   = aws_vpc.main.id
+  name        = "terratest-fixtures-default-tg"
+  port        = 80
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
   target_type = "ip"
 
   health_check {

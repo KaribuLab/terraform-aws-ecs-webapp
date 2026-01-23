@@ -423,6 +423,19 @@ service_discovery = {
 
 El módulo incluye pruebas automatizadas usando [Terratest](https://terratest.gruntwork.io/) que verifican que todos los recursos se crean correctamente.
 
+### Limpieza Automática de Recursos
+
+El pipeline de CI/CD incluye limpieza automática de recursos huérfanos:
+- **Pre-test**: Limpia recursos de ejecuciones anteriores fallidas
+- **Post-test**: Limpia recursos después de cada ejecución (éxito o fallo)
+
+Esto garantiza que no queden recursos huérfanos en AWS. El script de limpieza también puede ejecutarse manualmente:
+
+```bash
+cd test
+./cleanup-orphaned-resources.sh us-west-2  # Reemplaza con tu región
+```
+
 ### Ejecutar Pruebas con Terratest
 
 Las pruebas crean automáticamente toda la infraestructura necesaria (VPC, ALB, ECS cluster, etc.), aplican el módulo, verifican los recursos y limpian todo al finalizar.

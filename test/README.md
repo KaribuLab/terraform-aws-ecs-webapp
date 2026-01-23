@@ -6,6 +6,24 @@ This directory contains comprehensive integration tests for the Terraform ECS We
 
 The tests create a complete AWS infrastructure environment, apply the module, verify all resources are created correctly, and then clean up everything. This ensures the module works end-to-end in a real AWS environment.
 
+## Cleanup Orphaned Resources
+
+If a test run fails or is interrupted, some AWS resources may be left behind. Use the cleanup script to remove them:
+
+```bash
+cd test
+./cleanup-orphaned-resources.sh us-west-2  # Replace with your region
+```
+
+This script will remove:
+- Secrets Manager secrets (`terratest-fixtures-db-password`)
+- Application Load Balancers (`terratest-fixtures-alb`)
+- Target Groups (`terratest-fixtures-default-tg`)
+- CloudWatch Log Groups (`/ecs/terratest-fixtures-service`)
+- ECS Services (any in `terratest-fixtures-cluster`)
+
+**⚠️ Important**: Always run this script if you see errors about resources already existing when running tests.
+
 ## Prerequisites
 
 - Go 1.21 or later
