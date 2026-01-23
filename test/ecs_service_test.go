@@ -143,15 +143,16 @@ func testECSService(t *testing.T, moduleOptions *terraform.Options, infraOutputs
 	require.Equal(t, int64(80), *containerDef.PortMappings[0].ContainerPort)
 	require.Equal(t, "tcp", *containerDef.PortMappings[0].Protocol)
 
-	// Verify secret variables from SSM Parameter Store
-	t.Logf("🔐 Verifying secret variables from SSM Parameter Store...")
-	t.Logf("   Secrets count: %d (expected: 2)", len(containerDef.Secrets))
-	require.Len(t, containerDef.Secrets, 2, "Container should have 2 secrets configured")
+	// Verify secret variables (SSM Parameter Store and Secrets Manager)
+	t.Logf("🔐 Verifying secret variables...")
+	t.Logf("   Secrets count: %d (expected: 3)", len(containerDef.Secrets))
+	require.Len(t, containerDef.Secrets, 3, "Container should have 3 secrets configured")
 
-	// Expected secrets with their SSM Parameter Store ARNs
+	// Expected secrets with their ARNs (2 from SSM, 1 from Secrets Manager)
 	expectedSecrets := map[string]string{
-		"TEST_SECRET": infraOutputs.TestSecretARN,
-		"API_KEY":     infraOutputs.APIKeyARN,
+		"TEST_SECRET":       infraOutputs.TestSecretARN,
+		"API_KEY":           infraOutputs.APIKeyARN,
+		"DATABASE_PASSWORD": infraOutputs.DatabasePasswordARN,
 	}
 
 	// Verify each secret is present and uses the correct SSM ARN

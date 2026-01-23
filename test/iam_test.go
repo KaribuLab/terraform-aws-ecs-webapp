@@ -1,6 +1,7 @@
 package test
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 
@@ -78,7 +79,9 @@ func testIAM(t *testing.T, moduleOptions *terraform.Options, infraOutputs *Infra
 	require.NotNil(t, policyDoc.PolicyDocument)
 
 	// Verify policy contains required actions based on the types of secrets used
-	policyDocStr := *policyDoc.PolicyDocument
+	// The policy document is URL-encoded, so we need to decode it first
+	policyDocStr, err := url.QueryUnescape(*policyDoc.PolicyDocument)
+	require.NoError(t, err, "Failed to decode policy document")
 	
 	// Check for SSM permissions (TestSecret and APIKey are SSM parameters)
 	require.Contains(t, policyDocStr, "ssm:GetParameters", "Policy should contain SSM Parameter Store permissions")
