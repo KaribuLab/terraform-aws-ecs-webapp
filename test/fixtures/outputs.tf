@@ -57,3 +57,8 @@ output "api_key_arn" {
   description = "ARN of the API_KEY SSM parameter"
   value       = aws_ssm_parameter.api_key.arn
 }
+
+output "database_password_arn" {
+  description = "ARN of the DATABASE_PASSWORD Secrets Manager secret"
+  value       = aws_secretsmanager_secret.database_password.arn
+}

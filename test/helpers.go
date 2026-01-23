@@ -30,6 +30,7 @@ type InfrastructureOutputs struct {
 	AWSRegion              string
 	TestSecretARN          string
 	APIKeyARN              string
+	DatabasePasswordARN    string
 }
 
 // setupInfrastructure applies the infrastructure fixtures and returns outputs
@@ -266,6 +267,12 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 		t.Logf("⚠️  Could not read api_key_arn output: %v", err)
 	}
 
+	if databasePasswordARN, err := terraform.OutputE(t, terraformOptions, "database_password_arn"); err == nil {
+		outputs.DatabasePasswordARN = databasePasswordARN
+	} else {
+		t.Logf("⚠️  Could not read database_password_arn output: %v", err)
+	}
+
 	t.Logf("✅ Infrastructure outputs retrieved:")
 	// Helper function to format output values, showing "(not available)" if empty
 	formatOutput := func(value string) string {
@@ -294,6 +301,7 @@ func setupInfrastructure(t *testing.T, testName string) (*terraform.Options, *In
 	t.Logf("   Log Group Name: %s", formatOutput(outputs.CloudWatchLogGroupName))
 	t.Logf("   Test Secret ARN: %s", formatOutput(outputs.TestSecretARN))
 	t.Logf("   API Key ARN: %s", formatOutput(outputs.APIKeyARN))
+	t.Logf("   Database Password ARN: %s", formatOutput(outputs.DatabasePasswordARN))
 
 	// Validate that critical outputs are present before continuing
 	validateInfrastructureOutputs(t, outputs)
@@ -328,6 +336,9 @@ func validateInfrastructureOutputs(t *testing.T, outputs *InfrastructureOutputs)
 	}
 	if outputs.APIKeyARN == "" {
 		missingOutputs = append(missingOutputs, "api_key_arn")
+	}
+	if outputs.DatabasePasswordARN == "" {
+		missingOutputs = append(missingOutputs, "database_password_arn")
 	}
 
 	if len(missingOutputs) > 0 {
@@ -453,6 +464,10 @@ func setupModuleOptions(t *testing.T, moduleDir string, outputs *InfrastructureO
 			{
 				"name":      "API_KEY",
 				"valueFrom": outputs.APIKeyARN,
+			},
+			{
+				"name":      "DATABASE_PASSWORD",
+				"valueFrom": outputs.DatabasePasswordARN,
 			},
 		},
 		"autoscaling_config": map[string]interface{}{

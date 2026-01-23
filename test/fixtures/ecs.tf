@@ -49,3 +49,21 @@ resource "aws_ssm_parameter" "api_key" {
     TestName  = "terratest-fixtures"
   }
 }
+
+# Secrets Manager secret for testing
+resource "aws_secretsmanager_secret" "database_password" {
+  name                    = "terratest-fixtures-db-password"
+  description             = "Database password for ECS service testing"
+  recovery_window_in_days = 0 # Force delete immediately for testing
+
+  tags = {
+    Name      = "terratest-fixtures-db-password"
+    ManagedBy = "terratest"
+    TestName  = "terratest-fixtures"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "database_password" {
+  secret_id     = aws_secretsmanager_secret.database_password.id
+  secret_string = "test-db-password-12345"
+}

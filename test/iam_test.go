@@ -77,18 +77,23 @@ func testIAM(t *testing.T, moduleOptions *terraform.Options, infraOutputs *Infra
 	require.NoError(t, err)
 	require.NotNil(t, policyDoc.PolicyDocument)
 
-	// Verify policy contains required actions
-	require.Contains(t, *policyDoc.PolicyDocument, "secretsmanager:GetSecretValue", "Policy should contain Secrets Manager permissions")
-	require.Contains(t, *policyDoc.PolicyDocument, "ssm:GetParameters", "Policy should contain SSM Parameter Store permissions")
-
-	// Verify policy contains the test secret ARNs
-	require.Contains(t, *policyDoc.PolicyDocument, infraOutputs.TestSecretARN, "Policy should contain TestSecret ARN")
-	require.Contains(t, *policyDoc.PolicyDocument, infraOutputs.APIKeyARN, "Policy should contain APIKey ARN")
+	// Verify policy contains required actions based on the types of secrets used
+	policyDocStr := *policyDoc.PolicyDocument
+	
+	// Check for SSM permissions (TestSecret and APIKey are SSM parameters)
+	require.Contains(t, policyDocStr, "ssm:GetParameters", "Policy should contain SSM Parameter Store permissions")
+	require.Contains(t, policyDocStr, infraOutputs.TestSecretARN, "Policy should contain TestSecret ARN")
+	require.Contains(t, policyDocStr, infraOutputs.APIKeyARN, "Policy should contain APIKey ARN")
+	
+	// Check for Secrets Manager permissions (DatabasePassword is a Secrets Manager secret)
+	require.Contains(t, policyDocStr, "secretsmanager:GetSecretValue", "Policy should contain Secrets Manager permissions")
+	require.Contains(t, policyDocStr, infraOutputs.DatabasePasswordARN, "Policy should contain DatabasePassword ARN")
 
 	t.Logf("✅ Secrets policy verified successfully")
 	t.Logf("   Policy name: %s", secretsPolicyName)
 	t.Logf("   Contains SSM permissions: ✓")
 	t.Logf("   Contains Secrets Manager permissions: ✓")
-	t.Logf("   Contains TestSecret ARN: ✓")
-	t.Logf("   Contains APIKey ARN: ✓")
+	t.Logf("   Contains TestSecret ARN (SSM): ✓")
+	t.Logf("   Contains APIKey ARN (SSM): ✓")
+	t.Logf("   Contains DatabasePassword ARN (Secrets Manager): ✓")
 }
