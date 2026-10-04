@@ -64,7 +64,7 @@ variable "alb_security_group_id" {
 variable "service_discovery" {
   description = "ID of the Service Discovery namespace"
   type = object({
-    namespace_id   = string
+    namespace_id = string
     dns = object({
       name = string
       type = string
@@ -90,7 +90,7 @@ variable "secret_variables" {
     valueFrom = string
   }))
   default = []
-  
+
   validation {
     condition = alltrue([
       for secret in var.secret_variables :
@@ -122,9 +122,21 @@ variable "listener_rules" {
   default = []
 }
 
+variable "desired_count" {
+  description = "Desired number of ECS tasks. Used only when autoscaling_config is null. When autoscaling is enabled, min_capacity is used instead."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.desired_count >= 0
+    error_message = "desired_count must be greater than or equal to 0"
+  }
+}
+
 variable "autoscaling_config" {
   description = <<-EOT
-    Auto scaling configuration.
+    Auto scaling configuration. Set to null to skip Application Auto Scaling resources.
+    When null, the service uses desired_count and does not create autoscaling target or policies.
     
     IMPORTANT: When min_capacity = 0:
     - The service can scale to zero tasks, but this has implications:
@@ -153,20 +165,22 @@ variable "autoscaling_config" {
       scale_out_cooldown = number
     }))
   })
+  default = null
+
   validation {
-    condition     = var.autoscaling_config.min_capacity >= 0
+    condition     = var.autoscaling_config == null || var.autoscaling_config.min_capacity >= 0
     error_message = "min_capacity must be greater than or equal to 0"
   }
   validation {
-    condition     = var.autoscaling_config.max_capacity >= var.autoscaling_config.min_capacity
+    condition     = var.autoscaling_config == null || var.autoscaling_config.max_capacity >= var.autoscaling_config.min_capacity
     error_message = "max_capacity must be greater than or equal to min_capacity"
   }
   validation {
-    condition     = var.autoscaling_config.alb_request_count != null || var.autoscaling_config.memory != null || var.autoscaling_config.cpu != null
+    condition     = var.autoscaling_config == null || var.autoscaling_config.alb_request_count != null || var.autoscaling_config.memory != null || var.autoscaling_config.cpu != null
     error_message = "At least one of alb_request_count, memory, or cpu must be provided"
   }
   validation {
-    condition     = var.autoscaling_config.min_capacity > 0 || var.autoscaling_config.alb_request_count != null || var.autoscaling_config.cpu != null || var.autoscaling_config.memory != null
+    condition     = var.autoscaling_config == null || var.autoscaling_config.min_capacity > 0 || var.autoscaling_config.alb_request_count != null || var.autoscaling_config.cpu != null || var.autoscaling_config.memory != null
     error_message = "When min_capacity = 0, at least one autoscaling policy (cpu, memory, or alb_request_count) must be provided. Note: alb_request_count requires ALB."
   }
 }

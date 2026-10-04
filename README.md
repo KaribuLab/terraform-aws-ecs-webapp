@@ -25,7 +25,8 @@ Este módulo crea un servicio ECS Fargate para desplegar aplicaciones web con ba
 | secret_variables                  | list(object) | [Secret variables](#secret-variables) to pass to the container                                                      | no       |
 | health_check                      | object       | [Health check configuration](#health-check)                                                                         | yes      |
 | listener_rules                    | list(object) | [List of listener rules](#listener-rules). Required if using ALB.                                                   | no       |
-| autoscaling_config                | object       | [Auto scaling configuration](#autoscaling-config)                                                                   | yes      |
+| desired_count                     | number       | Desired ECS task count when autoscaling_config is null (default: 1)                                                 | no       |
+| autoscaling_config                | object       | [Auto scaling configuration](#autoscaling-config). Null skips autoscaling resources.                                | no       |
 | common_tags                       | map(string)  | Common tags to be applied to all resources                                                                          | yes      |
 | task_policy_json                  | string       | IAM Policy document in JSON format for the task role                                                                | no       |
 | target_group_deregistration_delay | number       | Time for ELB to wait before deregistering targets                                                                   | no       |
@@ -108,6 +109,8 @@ Al menos uno de `path_patterns` o `host_headers` debe ser proporcionado.
 
 ### Autoscaling Config
 
+Optional. If omitted or set to `null`, the module does not create Application Auto Scaling resources and the service uses `desired_count`.
+
 | Name              | Type   | Description                                                                     | Required |
 | ----------------- | ------ | ------------------------------------------------------------------------------- | -------- |
 | min_capacity      | number | Minimum task capacity                                                           | yes      |
@@ -116,7 +119,7 @@ Al menos uno de `path_patterns` o `host_headers` debe ser proporcionado.
 | memory            | object | [Memory autoscaling configuration](#memory-autoscaling-configuration)           | no       |
 | alb_request_count | object | [ALB request count autoscaling configuration](#alb-request-count-configuration) | no       |
 
-At least one of `cpu`, `memory`, or `alb_request_count` must be provided. When `min_capacity = 0`, `alb_request_count` is required to enable automatic scaling from 0. **Note:** `alb_request_count` requires ALB to be configured (`alb_load_balancer_arn` must be provided).
+When `autoscaling_config` is provided, at least one of `cpu`, `memory`, or `alb_request_count` must be provided. When `min_capacity = 0`, `alb_request_count` is required to enable automatic scaling from 0. **Note:** `alb_request_count` requires ALB to be configured (`alb_load_balancer_arn` must be provided).
 
 #### CPU Autoscaling Configuration
 
@@ -255,6 +258,19 @@ module "ecs_webapp" {
     Project     = "MyProject"
     Environment = "production"
   }
+}
+```
+
+#### Configuración sin autoscaling
+```hcl
+module "ecs_webapp" {
+  source = "github.com/your-username/terraform-aws-ecs-webapp"
+
+  // ... configuración básica ...
+
+  # Omite autoscaling_config o pásalo como null
+  autoscaling_config = null
+  desired_count      = 2
 }
 ```
 

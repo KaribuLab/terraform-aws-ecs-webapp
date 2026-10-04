@@ -24,7 +24,7 @@ resource "terraform_data" "validation" {
     }
 
     precondition {
-      condition     = var.autoscaling_config.alb_request_count == null || var.alb_load_balancer_arn != null
+      condition     = try(var.autoscaling_config.alb_request_count, null) == null || var.alb_load_balancer_arn != null
       error_message = "alb_request_count autoscaling cannot be used without ALB (alb_load_balancer_arn)"
     }
 

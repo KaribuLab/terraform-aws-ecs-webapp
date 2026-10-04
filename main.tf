@@ -20,7 +20,7 @@ resource "aws_ecs_task_definition" "webapp" {
         }
       ],
       environment = var.environment_variables,
-      secrets = var.secret_variables,
+      secrets     = var.secret_variables,
       logConfiguration = {
         logDriver = "awslogs",
         options = {
@@ -56,7 +56,7 @@ resource "aws_ecs_service" "webapp" {
   name            = var.service_name
   cluster         = var.cluster_name
   task_definition = aws_ecs_task_definition.webapp.arn
-  desired_count   = var.autoscaling_config.min_capacity
+  desired_count   = var.autoscaling_config != null ? var.autoscaling_config.min_capacity : var.desired_count
   launch_type     = "FARGATE"
 
   network_configuration {
@@ -253,6 +253,8 @@ resource "aws_iam_role_policy" "task_policy" {
 }
 
 resource "aws_appautoscaling_target" "ecs" {
+  count = var.autoscaling_config != null ? 1 : 0
+
   max_capacity       = var.autoscaling_config.max_capacity
   min_capacity       = var.autoscaling_config.min_capacity
   resource_id        = "service/${var.cluster_name}/${var.service_name}"
@@ -263,12 +265,12 @@ resource "aws_appautoscaling_target" "ecs" {
 }
 
 resource "aws_appautoscaling_policy" "cpu" {
-  count              = var.autoscaling_config.cpu != null ? 1 : 0
+  count              = try(var.autoscaling_config.cpu, null) != null ? 1 : 0
   name               = "cpu-scaling-policy-${var.service_name}"
   policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.ecs.resource_id
-  scalable_dimension = aws_appautoscaling_target.ecs.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.ecs.service_namespace
+  resource_id        = aws_appautoscaling_target.ecs[0].resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs[0].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs[0].service_namespace
 
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification {
@@ -282,12 +284,12 @@ resource "aws_appautoscaling_policy" "cpu" {
 }
 
 resource "aws_appautoscaling_policy" "memory" {
-  count              = var.autoscaling_config.memory != null ? 1 : 0
+  count              = try(var.autoscaling_config.memory, null) != null ? 1 : 0
   name               = "memory-scaling-policy-${var.service_name}"
   policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.ecs.resource_id
-  scalable_dimension = aws_appautoscaling_target.ecs.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.ecs.service_namespace
+  resource_id        = aws_appautoscaling_target.ecs[0].resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs[0].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs[0].service_namespace
 
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification {
@@ -300,12 +302,12 @@ resource "aws_appautoscaling_policy" "memory" {
 }
 
 resource "aws_appautoscaling_policy" "alb_request_count" {
-  count              = var.autoscaling_config.alb_request_count != null && var.alb_load_balancer_arn != null ? 1 : 0
+  count              = try(var.autoscaling_config.alb_request_count, null) != null && var.alb_load_balancer_arn != null ? 1 : 0
   name               = "alb-request-count-scaling-policy-${var.service_name}"
   policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.ecs.resource_id
-  scalable_dimension = aws_appautoscaling_target.ecs.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.ecs.service_namespace
+  resource_id        = aws_appautoscaling_target.ecs[0].resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs[0].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs[0].service_namespace
 
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification {
@@ -358,11 +360,11 @@ resource "aws_security_group_rule" "webapp" {
 }
 
 resource "aws_security_group_rule" "vpc" {
-  type                     = "ingress"
-  from_port                = var.container_port
-  to_port                  = var.container_port
-  protocol                 = "tcp"
-  cidr_blocks              = [var.vpc_cidr_block]
-  security_group_id        = aws_security_group.ecs_service.id
-  description              = "Allow traffic from VPC to container port ${var.container_port}"
+  type              = "ingress"
+  from_port         = var.container_port
+  to_port           = var.container_port
+  protocol          = "tcp"
+  cidr_blocks       = [var.vpc_cidr_block]
+  security_group_id = aws_security_group.ecs_service.id
+  description       = "Allow traffic from VPC to container port ${var.container_port}"
 }
