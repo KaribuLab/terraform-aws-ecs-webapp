@@ -115,11 +115,14 @@ Optional. If omitted or set to `null`, the module does not create Application Au
 | ----------------- | ------ | ------------------------------------------------------------------------------- | -------- |
 | min_capacity      | number | Minimum task capacity                                                           | yes      |
 | max_capacity      | number | Maximum task capacity                                                           | yes      |
+| idle_minutes      | number | Minutes without ECS target requests before scaling to 0 (default 15)           | no       |
 | cpu               | object | [CPU autoscaling configuration](#cpu-autoscaling-configuration)                 | no       |
 | memory            | object | [Memory autoscaling configuration](#memory-autoscaling-configuration)           | no       |
 | alb_request_count | object | [ALB request count autoscaling configuration](#alb-request-count-configuration) | no       |
 
-When `autoscaling_config` is provided, at least one of `cpu`, `memory`, or `alb_request_count` must be provided. When `min_capacity = 0`, `alb_request_count` is required to enable automatic scaling from 0. **Note:** `alb_request_count` requires ALB to be configured (`alb_load_balancer_arn` must be provided).
+When `autoscaling_config` is provided, at least one of `cpu`, `memory`, or `alb_request_count` must be provided. **Note:** `alb_request_count` requires ALB to be configured (`alb_load_balancer_arn` must be provided).
+
+`idle_minutes` (optional, default 15) applies only when `min_capacity = 0`. The module creates the wake Lambda; the caller does not.
 
 #### CPU Autoscaling Configuration
 
@@ -145,31 +148,18 @@ When `autoscaling_config` is provided, at least one of `cpu`, `memory`, or `alb_
 | scale_in_cooldown  | number | Cool-down time for scaling in (seconds)                                        | yes      |
 | scale_out_cooldown | number | Cool-down time for scaling out (seconds)                                       | yes      |
 
-This policy uses ALB metrics (`ALBRequestCountPerTarget`) which are available even when there are 0 tasks, enabling automatic scaling from 0. **Required when `min_capacity = 0`**.
+This policy uses ALB metrics (`ALBRequestCountPerTarget`) to scale between 1 and `max_capacity`. It does not wake a service that has zero tasks.
 
-### ⚠️ Consideraciones sobre Escalado a 0 (min_capacity = 0)
+### Escalado a 0 (min_capacity = 0)
 
-El módulo **técnicamente permite** escalar a 0 tareas (`min_capacity = 0`), pero hay consideraciones importantes:
+Con `min_capacity = 0` y ALB, el módulo crea la Lambda, el target group `lambda` y las alarmas. Quien consume el módulo no define esa función.
 
-**Limitaciones cuando min_capacity = 0:**
-
-1. **Target Group sin targets**: Cuando el servicio escala a 0, el Target Group del ALB no tendrá targets saludables, causando errores **503 (Service Unavailable)** para todas las solicitudes entrantes hasta que el servicio escale nuevamente.
-
-2. **Métricas no disponibles**: Las políticas de autoscaling basadas en CPU y memoria (`ECSServiceAverageCPUUtilization` y `ECSServiceAverageMemoryUtilization`) requieren que haya al menos una tarea ejecutándose para generar métricas. Cuando hay 0 tareas:
-   - No se generan métricas de CPU/memoria
-   - Las políticas de CPU/Memoria no pueden escalar desde 0 automáticamente
-
-3. **Cold start**: Cuando el servicio escala desde 0, habrá un retraso (cold start) antes de que las tareas estén listas para recibir tráfico.
-
-**Solución: Política basada en ALB Request Count**
-
-Para habilitar el escalado automático desde 0, **debe proporcionar `alb_request_count`** cuando `min_capacity = 0`. Esta política usa métricas del ALB (`ALBRequestCountPerTarget`) que están disponibles incluso sin tareas ejecutándose, permitiendo que el servicio escale automáticamente cuando lleguen solicitudes.
-
-**Recomendaciones:**
-
-- **Producción con ALB**: Use `min_capacity = 1` para garantizar disponibilidad continua, o use `min_capacity = 0` con `alb_request_count` configurado
-- **Desarrollo/Testing**: `min_capacity = 0` con `alb_request_count` es útil para ahorrar costos cuando no hay tráfico
-- **Políticas combinadas**: Puede usar `alb_request_count` junto con `cpu` y/o `memory`. AWS Application Auto Scaling evaluará todas las políticas y usará la que requiera más capacidad
+- Con el service en cero, la listener rule apunta a la Lambda. El request llama a `UpdateService` con `desiredCount = 1`, espera un target healthy y responde **307** para que el cliente reintente contra ECS.
+- Sin requests al target group de ECS durante `idle_minutes`, la Lambda apunta la regla a sí misma y baja `desiredCount` a 0.
+- Si el autoscaling deja el service en cero sin pasar por esa alarma, otra alarma de `RunningTaskCount` corrige la regla.
+- CPU y memoria no despiertan desde cero. `alb_request_count` escala de 1 hacia arriba.
+- El primer request espera el cold start de Fargate. El idle timeout del ALB se configura en el balanceador y tiene que cubrir esa espera. La Lambda sigue hasta 180 segundos aunque el ALB ya haya cortado la conexión.
+- Un `apply` no revierte el forward de la regla. Cambiar entre `min_capacity = 0` y un mínimo mayor reemplaza la regla para tomar el target group que corresponde.
 
 ### Deployment Config
 
@@ -189,6 +179,7 @@ Para habilitar el escalado automático desde 0, **debe proporcionar `alb_request
 | cluster_name            | string | Name of the ECS cluster                                                      |
 | service_name            | string | Name of the ECS service                                                      |
 | security_group_id       | string | ID of the security group used for the ECS service                            |
+| scale_to_zero_lambda_arn | string | ARN of the wake Lambda. Null when scale-to-zero is off.                     |
 
 ## ALB vs Service Discovery
 
@@ -382,21 +373,21 @@ module "ecs_webapp" {
 
 **Nota:** Cuando no se usa ALB, el servicio solo será accesible desde dentro de la VPC mediante el nombre DNS configurado en Service Discovery. El security group permitirá tráfico desde toda la VPC al puerto del contenedor.
 
-#### Configuración con escalado a 0 usando ALB Request Count
+#### Configuración con escalado a 0
 ```hcl
 module "ecs_webapp" {
   source = "github.com/your-username/terraform-aws-ecs-webapp"
 
-  // ... configuración básica ...
+  // ... configuración básica, incluido el ALB ...
 
   autoscaling_config = {
-    min_capacity       = 0  # Permite escalar a 0 tareas
-    max_capacity       = 10
-    # ALB request count es requerido cuando min_capacity = 0
+    min_capacity = 0
+    max_capacity = 10
+    idle_minutes = 15
     alb_request_count = {
-      target_value       = 100  # Escala cuando hay más de 100 requests por target
-      scale_in_cooldown  = 300  # Espera 5 minutos antes de reducir
-      scale_out_cooldown = 60  # Espera 1 minuto antes de aumentar
+      target_value       = 100
+      scale_in_cooldown  = 300
+      scale_out_cooldown = 60
     }
     # Opcional: también puede incluir políticas de CPU/Memoria
     # Estas funcionarán cuando haya tareas ejecutándose

@@ -94,9 +94,16 @@ resource "aws_ecs_service" "webapp" {
     rollback = var.enable_deployment_circuit_breaker
   }
 
-  # When ALB is configured, depend on listener rules being created first
-  # When for_each is empty (no ALB), this dependency is a no-op
-  depends_on = [aws_lb_listener_rule.webapp]
+  # Application Auto Scaling and the scale-to-zero Lambda change this value
+  # after create. Writing it again on every apply would force the service
+  # back to min_capacity, including 0 while the listener still points at ECS.
+  lifecycle {
+    ignore_changes = [desired_count]
+  }
+
+  # When ALB is configured, depend on listener rules being created first.
+  # When for_each is empty (no ALB), this dependency is a no-op.
+  depends_on = [aws_lb_listener_rule.webapp, aws_lb_target_group_attachment.wake]
 
   tags = var.common_tags
 }
@@ -132,8 +139,19 @@ resource "aws_lb_listener_rule" "webapp" {
   priority     = each.value.priority
 
   action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.webapp[0].arn
+    type = "forward"
+    # Created pointing at the wake Lambda when scale-to-zero is on, otherwise
+    # at the ECS target group. The Lambda swaps this action while the service
+    # sleeps or wakes. ignore_changes stops a later apply from reverting it.
+    target_group_arn = local.scale_to_zero_enabled ? one(aws_lb_target_group.wake[*].arn) : one(aws_lb_target_group.webapp[*].arn)
+  }
+
+  lifecycle {
+    ignore_changes = [action]
+    replace_triggered_by = [
+      terraform_data.scale_to_zero_mode,
+      aws_lb_target_group.webapp,
+    ]
   }
 
   condition {

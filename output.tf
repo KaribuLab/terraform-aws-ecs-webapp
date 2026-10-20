@@ -6,12 +6,12 @@ output "alb_target_group_arn" {
 output "ecs_service_name" {
   description = "Name of the ECS service"
   value       = aws_ecs_service.webapp.name
-} 
+}
 
 output "ecs_task_definition_arn" {
   description = "ARN of the ECS task definition"
   value       = aws_ecs_task_definition.webapp.arn
-} 
+}
 
 output "iam_execution_role_arn" {
   description = "ARN of the ECS execution role"
@@ -26,9 +26,14 @@ output "cluster_name" {
 output "service_name" {
   description = "Name of the ECS service"
   value       = var.service_name
-} 
+}
 
 output "security_group_id" {
   description = "ID of the security group used for the ECS service"
   value       = aws_security_group.ecs_service.id
+}
+
+output "scale_to_zero_lambda_arn" {
+  description = "ARN of the Lambda that wakes the service from zero tasks. Null when scale-to-zero is not enabled."
+  value       = local.scale_to_zero_enabled ? aws_lambda_function.scale_to_zero[0].arn : null
 } 

@@ -34,6 +34,9 @@ cleanup-test-infra.sh
 test.tfvars
 *.old
 
+# Lambda package built by the archive provider
+lambda/*.zip
+
 # Terratest files
 test/.terraform/
 test/terraform.tfstate*

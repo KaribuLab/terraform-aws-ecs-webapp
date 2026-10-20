@@ -123,7 +123,7 @@ variable "listener_rules" {
 }
 
 variable "desired_count" {
-  description = "Desired number of ECS tasks. Used only when autoscaling_config is null. When autoscaling is enabled, min_capacity is used instead."
+  description = "Desired number of ECS tasks when the service is created and autoscaling_config is null. When autoscaling is enabled, min_capacity is used for the initial count. Later applies do not change the running count."
   type        = number
   default     = 1
 
@@ -137,18 +137,20 @@ variable "autoscaling_config" {
   description = <<-EOT
     Auto scaling configuration. Set to null to skip Application Auto Scaling resources.
     When null, the service uses desired_count and does not create autoscaling target or policies.
-    
-    IMPORTANT: When min_capacity = 0:
-    - The service can scale to zero tasks, but this has implications:
-      * The ALB Target Group will have no healthy targets, causing 503 errors for incoming requests (if ALB is configured)
-      * CPU/Memory metrics won't be available when there are 0 tasks, so autoscaling policies based on these metrics cannot automatically scale up from 0
-      * You must provide alb_request_count to enable automatic scaling from 0 based on ALB request metrics (requires ALB)
-    - Consider using min_capacity = 1 for production workloads to ensure availability
-    - All policies (CPU, Memory, and ALB) can coexist. AWS Application Auto Scaling will use the policy that requires the highest capacity.
+
+    When min_capacity = 0 and an ALB is configured, the module creates the wake Lambda,
+    its target group, and the CloudWatch alarms. The caller does not create that Lambda.
+    CPU and memory policies still cannot scale out from 0; the Lambda performs 0 -> 1.
+    alb_request_count scales between 1 and max_capacity. It does not wake a service with no targets.
+
+    idle_minutes is how long the ECS target group can stay without requests before the Lambda
+    sets desired count to 0 and points the listener rule at itself. The ALB idle timeout is
+    configured on the load balancer, outside this module, and should cover the task cold start.
   EOT
   type = object({
     min_capacity = number
     max_capacity = number
+    idle_minutes = optional(number, 15)
     memory = optional(object({
       target_value       = number
       scale_in_cooldown  = number
@@ -181,7 +183,11 @@ variable "autoscaling_config" {
   }
   validation {
     condition     = var.autoscaling_config == null || var.autoscaling_config.min_capacity > 0 || var.autoscaling_config.alb_request_count != null || var.autoscaling_config.cpu != null || var.autoscaling_config.memory != null
-    error_message = "When min_capacity = 0, at least one autoscaling policy (cpu, memory, or alb_request_count) must be provided. Note: alb_request_count requires ALB."
+    error_message = "When min_capacity = 0, at least one autoscaling policy (cpu, memory, or alb_request_count) must be provided."
+  }
+  validation {
+    condition     = var.autoscaling_config == null || coalesce(var.autoscaling_config.idle_minutes, 15) >= 1
+    error_message = "idle_minutes must be greater than or equal to 1"
   }
 }
 
